@@ -1,0 +1,67 @@
+---
+# Custom vLLM ServingRuntime.
+#
+# WHY CUSTOM: RHOAI ships a bundled vLLM ServingRuntime, but Gemma 4
+# is new enough that the bundled vLLM version may not yet have model
+# architecture support. Rather than fight the cluster runtime, we
+# define our own and pin an upstream vllm/vllm-openai image tag we
+# know works.
+#
+# !!! BEFORE APPLYING: verify the vLLM image tag below actually
+# !!! supports Gemma 4. Check the vLLM release notes / GitHub releases.
+# !!! Update the `image:` field if you need a newer tag.
+#
+# This runtime is namespace-scoped (ServingRuntime, not
+# ClusterServingRuntime) so it only affects the gemma-serving project.
+apiVersion: serving.kserve.io/v1alpha1
+kind: ServingRuntime
+metadata:
+  name: vllm-gemma4
+  namespace: gemma-serving
+  annotations:
+    openshift.io/display-name: "vLLM (Gemma 4 compatible)"
+    opendatahub.io/recommended-accelerators: '["nvidia.com/gpu"]'
+  labels:
+    opendatahub.io/dashboard: "true"
+spec:
+  supportedModelFormats:
+    - name: vLLM
+      autoSelect: true
+  multiModel: false
+  containers:
+    - name: kserve-container
+      # PIN A KNOWN-GOOD TAG. Check vLLM releases for Gemma 4 support
+      # before recording. As of writing, you'll want a recent build.
+      image: quay.io/modh/vllm:rhoai-2.x-cuda  # <-- VERIFY/REPLACE
+      command:
+        - python
+        - -m
+        - vllm.entrypoints.openai.api_server
+      args:
+        - "--port=8080"
+        - "--model=/mnt/models"
+        - "--served-model-name=gemma-4-e4b"
+        - "--max-model-len=8192"
+        - "--gpu-memory-utilization=0.90"
+        - "--dtype=auto"
+        - "--enforce-eager"  # Skip CUDA graph capture; saves VRAM on 8GB cards
+        - "--max-num-seqs=4"  # Cap concurrency to fit KV cache in 8GB
+      env:
+        - name: HF_HUB_OFFLINE
+          value: "1"
+      ports:
+        - containerPort: 8080
+          protocol: TCP
+          name: http1
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        initialDelaySeconds: 60
+        periodSeconds: 10
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        initialDelaySeconds: 120
+        periodSeconds: 30

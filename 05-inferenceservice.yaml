@@ -1,0 +1,50 @@
+---
+# InferenceService for Gemma 4 E4B on the 3060 Ti.
+#
+# storageUri uses the OCI scheme, which makes KServe pull the model
+# from a container image (the "ModelCar" pattern). We build this image
+# separately -- see Containerfile and build.sh in this bundle.
+#
+# The RawDeployment annotation matches the DSC setting -- KServe will
+# create a plain Deployment + Service instead of a Knative Service.
+#
+# Resource sizing for 8GB VRAM (3060 Ti):
+# - nvidia.com/gpu: 1 -- whole-card allocation
+# - memory: 16Gi limit -- vLLM + model loading + headroom
+# - cpu: 8 limit -- preprocessing, tokenization
+#
+# For a real pilot on L4/L40S, change:
+# - storageUri to your 26B-A4B image
+# - --max-model-len to something larger (32k+)
+# - --max-num-seqs to 16 or 32 for real concurrency
+# - drop --enforce-eager to let vLLM build CUDA graphs
+apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: gemma-4-e4b
+  namespace: gemma-serving
+  annotations:
+    serving.kserve.io/deploymentMode: RawDeployment
+    serving.kserve.io/autoscalerClass: external
+  labels:
+    opendatahub.io/dashboard: "true"
+spec:
+  predictor:
+    minReplicas: 1
+    maxReplicas: 1
+    model:
+      modelFormat:
+        name: vLLM
+      runtime: vllm-gemma4
+      # OCI image built from ./Containerfile, pushed to your Quay.
+      # Update the tag as you iterate.
+      storageUri: oci://quay.io/ryan_nix/gemma-4-e4b-it:v1
+      resources:
+        limits:
+          nvidia.com/gpu: "1"
+          memory: 16Gi
+          cpu: "8"
+        requests:
+          nvidia.com/gpu: "1"
+          memory: 12Gi
+          cpu: "4"

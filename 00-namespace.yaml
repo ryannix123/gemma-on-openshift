@@ -1,0 +1,11 @@
+---
+# Namespace where the Gemma 4 InferenceService will live.
+# The opendatahub.io/dashboard label makes the namespace show up in the
+# RHOAI dashboard so you can demo it visually on camera.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gemma-serving
+  labels:
+    opendatahub.io/dashboard: "true"
+    modelmesh-enabled: "false"

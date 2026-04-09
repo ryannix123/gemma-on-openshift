@@ -1,0 +1,42 @@
+---
+# OLSConfig pointing OpenShift Lightspeed at the in-cluster KServe
+# predictor service for Gemma 4.
+#
+# The URL pattern for KServe RawDeployment is:
+#   http://<isvc-name>-predictor.<namespace>.svc.cluster.local:80/v1
+#
+# The model name MUST exactly match what vLLM advertises as the model
+# ID. We set it via --served-model-name=gemma-4-e4b in the
+# ServingRuntime args, so that's what we reference here.
+#
+# Verify after applying with:
+#   oc -n gemma-serving port-forward svc/gemma-4-e4b-predictor 8080:80
+#   curl -s http://localhost:8080/v1/models | jq
+# The "id" field in the response is what must match models[].name below.
+#
+# Caveats reminder:
+# - This configuration is NOT officially supported by Red Hat. The
+#   `openai` provider type pointing at a self-hosted vLLM is the
+#   "technically works" path, not the "supported" path.
+# - For an enterprise pilot, file a support exception or wait for
+#   official Vertex/Gemma-flavored support if/when it arrives.
+apiVersion: ols.openshift.io/v1alpha1
+kind: OLSConfig
+metadata:
+  name: cluster
+spec:
+  llm:
+    providers:
+      - name: gemma-rhoai
+        type: openai
+        url: 'http://gemma-4-e4b-predictor.gemma-serving.svc.cluster.local/v1'
+        credentialsSecretRef:
+          name: gemma-creds
+        models:
+          - name: gemma-4-e4b
+  ols:
+    defaultModel: gemma-4-e4b
+    defaultProvider: gemma-rhoai
+    logLevel: INFO
+    deployment:
+      replicas: 1

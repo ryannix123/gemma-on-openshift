@@ -1,0 +1,59 @@
+---
+# NVIDIA GPU Operator ClusterPolicy.
+# Assumes you've installed the NVIDIA GPU Operator from OperatorHub
+# into the nvidia-gpu-operator namespace.
+#
+# This is a minimal config that works for a single consumer GPU like
+# the 3060 Ti. Defaults handle driver build, container toolkit, device
+# plugin, DCGM exporter, and node status exporter.
+#
+# 3060 Ti gotcha: NVIDIA's enterprise driver branch sometimes lags
+# consumer GPU support. If the nvidia-driver-daemonset pod CrashLoops,
+# pin driver.version to a known-good value (e.g. "550.90.07") and
+# re-apply. Check pod logs in nvidia-gpu-operator namespace.
+#
+# Validate end-to-end with the cuda-vectoradd test pod (see README).
+apiVersion: nvidia.com/v1
+kind: ClusterPolicy
+metadata:
+  name: gpu-cluster-policy
+spec:
+  operator:
+    defaultRuntime: crio
+    use_ocp_driver_toolkit: true
+  daemonsets:
+    updateStrategy: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: "1"
+  driver:
+    enabled: true
+    # Uncomment and pin a specific version if the auto-selected driver
+    # CrashLoops on your 3060 Ti:
+    # version: "550.90.07"
+    certConfig:
+      name: ""
+    licensingConfig:
+      configMapName: ""
+    virtualTopology:
+      config: ""
+    repoConfig:
+      configMapName: ""
+  toolkit:
+    enabled: true
+  devicePlugin:
+    enabled: true
+  dcgm:
+    enabled: true
+  dcgmExporter:
+    enabled: true
+  gfd:
+    enabled: true
+  migManager:
+    enabled: false
+  nodeStatusExporter:
+    enabled: true
+  validator:
+    plugin:
+      env:
+        - name: WITH_WORKLOAD
+          value: "true"

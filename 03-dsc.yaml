@@ -1,0 +1,54 @@
+---
+# DataScienceCluster trimmed for Single Node OpenShift.
+# Assumes you've installed the Red Hat OpenShift AI Operator from
+# OperatorHub and that the operator has created a DSCInitialization
+# (verify with `oc get dsci`).
+#
+# Component choices and why:
+# - kserve: Managed -- this is the whole point, we need it
+#   defaultDeploymentMode: RawDeployment avoids pulling in OpenShift
+#   Serverless (Knative) and Service Mesh (Istio), which are heavy on
+#   SNO. The tradeoff is no scale-to-zero. Worth it on constrained
+#   hardware. For an enterprise pilot on real iron, switch back to
+#   Serverless mode.
+# - dashboard: Managed -- great B-roll for the video, lets you click
+#   through Models -> Deployed models and show the InferenceService
+#   visually. ~200MB RAM cost, worth it.
+# - Everything else: Removed -- workbenches, modelmesh, pipelines,
+#   ray, kueue, training operator, codeflare are all unused for an
+#   inference-only demo and would eat several GB of RAM and dozens of
+#   pods on SNO.
+apiVersion: datasciencecluster.opendatahub.io/v1
+kind: DataScienceCluster
+metadata:
+  name: default-dsc
+spec:
+  components:
+    kserve:
+      managementState: Managed
+      defaultDeploymentMode: RawDeployment
+      serving:
+        managementState: Removed  # Disables Knative/Istio install
+        name: knative-serving
+    dashboard:
+      managementState: Managed
+    workbenches:
+      managementState: Removed
+    modelmeshserving:
+      managementState: Removed
+    datasciencepipelines:
+      managementState: Removed
+    ray:
+      managementState: Removed
+    kueue:
+      managementState: Removed
+    trainingoperator:
+      managementState: Removed
+    codeflare:
+      managementState: Removed
+    modelregistry:
+      managementState: Removed
+    trustyai:
+      managementState: Removed
+    feastoperator:
+      managementState: Removed
