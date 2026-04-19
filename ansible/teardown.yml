@@ -1,0 +1,98 @@
+---
+# teardown.yml - Remove everything deploy.yml created.
+#
+# NOTE: This does NOT uninstall the operators themselves (NFD, GPU
+# Operator, RHOAI, OLS). Those were installed manually from OperatorHub
+# and should be uninstalled manually if you want them gone.
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.ini teardown.yml
+#
+# To see what would happen first:
+#   ansible-playbook -i inventory/hosts.ini teardown.yml --check
+
+- name: "Teardown OLS + Gemma 4 deployment"
+  hosts: local
+  gather_facts: false
+
+  tasks:
+    - name: "Preflight | Verify logged in"
+      ansible.builtin.command:
+        cmd: oc whoami
+      register: oc_whoami
+      changed_when: false
+      failed_when: oc_whoami.rc != 0
+
+    - name: "Confirm teardown"
+      ansible.builtin.pause:
+        prompt: |
+          This will remove:
+            - OLSConfig and OLS credentials secret
+            - Gemma InferenceService, ServingRuntime, gemma-serving namespace
+            - RHOAI DataScienceCluster
+            - NVIDIA GPU ClusterPolicy (uninstalls driver from the node)
+            - NodeFeatureDiscovery CR
+
+          The operators themselves will NOT be removed.
+
+          Press Enter to continue or Ctrl+C to abort.
+      when: not ansible_check_mode
+
+    # Reverse of the apply order. --ignore-not-found keeps each step
+    # idempotent -- re-running teardown after a partial first run
+    # just skips the already-gone resources without erroring.
+
+    - name: "Remove OLSConfig"
+      ansible.builtin.command:
+        cmd: oc delete olsconfig cluster --ignore-not-found
+      register: out
+      changed_when: "'deleted' in out.stdout"
+
+    - name: "Remove OLS credentials secret"
+      ansible.builtin.command:
+        cmd: oc delete secret gemma-creds -n openshift-lightspeed --ignore-not-found
+      register: out
+      changed_when: "'deleted' in out.stdout"
+
+    - name: "Remove InferenceService"
+      ansible.builtin.command:
+        cmd: oc delete inferenceservice gemma-4-e4b -n gemma-serving --ignore-not-found
+      register: out
+      changed_when: "'deleted' in out.stdout"
+
+    - name: "Remove ServingRuntime"
+      ansible.builtin.command:
+        cmd: oc delete servingruntime vllm-gemma4 -n gemma-serving --ignore-not-found
+      register: out
+      changed_when: "'deleted' in out.stdout"
+
+    - name: "Remove gemma-serving namespace"
+      ansible.builtin.command:
+        cmd: oc delete namespace gemma-serving --ignore-not-found
+      register: out
+      changed_when: "'deleted' in out.stdout"
+
+    - name: "Remove DataScienceCluster"
+      ansible.builtin.command:
+        cmd: oc delete datasciencecluster default-dsc --ignore-not-found
+      register: out
+      changed_when: "'deleted' in out.stdout"
+
+    - name: "Remove NVIDIA ClusterPolicy"
+      ansible.builtin.command:
+        cmd: oc delete clusterpolicy gpu-cluster-policy --ignore-not-found
+      register: out
+      changed_when: "'deleted' in out.stdout"
+
+    - name: "Remove NodeFeatureDiscovery CR"
+      ansible.builtin.command:
+        cmd: oc delete nodefeaturediscovery nfd-instance -n openshift-nfd --ignore-not-found
+      register: out
+      changed_when: "'deleted' in out.stdout"
+
+    - name: "Teardown summary"
+      ansible.builtin.debug:
+        msg:
+          - "Custom resources removed."
+          - "Operators themselves were NOT uninstalled."
+          - "Uninstall via OperatorHub > Installed Operators if desired."

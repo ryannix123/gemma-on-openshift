@@ -38,6 +38,22 @@ For a real customer pilot, the target is a 3-node compact cluster with
 an L4 or L40S GPU worker. The YAML in this bundle changes minimally
 between the two — see "Scaling up" at the bottom.
 
+## Two paths: manual or automated
+
+You can apply the manifests by hand (`oc apply -f ...`) or run the
+included Ansible playbook that handles everything — including GPU
+auto-detection, readiness waits, and a CUDA validation step — in one
+command.
+
+- **Manual apply:** see "Apply order" below. Best when you're
+  recording a video or learning the pattern step by step.
+- **Ansible automation:** see [`ansible/README.md`](ansible/README.md).
+  Best for repeat deployments, customer pilots, or when you just want
+  the thing built without babysitting it.
+
+Both paths apply the same YAML files. The Ansible playbook uses `oc`
+under the hood — no extra Python dependencies, no SSH required.
+
 ## Prerequisites (do these first, in this order)
 
 1. **Install operators from OperatorHub** (in the web console):
@@ -61,7 +77,7 @@ between the two — see "Scaling up" at the bottom.
    vLLM release notes and update before applying. **This is the most
    likely thing to break.**
 
-## Apply order
+## Apply order (manual path)
 
 ```bash
 # Phase 1: GPU plumbing
@@ -142,6 +158,21 @@ oc -n openshift-lightspeed get pods -w
 # Wait for lightspeed-app-server to be Running.
 ```
 
+## Apply order (Ansible path)
+
+```bash
+cd ansible/
+pip install --user ansible-core
+oc login ...                                    # log in to target cluster
+ansible-playbook -i inventory/hosts.ini deploy.yml
+```
+
+That's it. The playbook runs every step above — including GPU
+detection via `oc debug node`, readiness waits, and the CUDA
+validation pod — as a single idempotent run. See
+[`ansible/README.md`](ansible/README.md) for tags, troubleshooting,
+and teardown instructions.
+
 ## Demo: ask OLS a question
 
 1. In the OCP web console, click the Lightspeed sparkle icon
@@ -197,18 +228,33 @@ homelab and pilot. Only three things change:
 
 That's it. The OLSConfig (`07-olsconfig.yaml`) doesn't change at all.
 
-## File index
+## Repository layout
 
-| File | Purpose |
-|---|---|
-| `00-namespace.yaml` | gemma-serving namespace with dashboard label |
-| `01-nfd.yaml` | NodeFeatureDiscovery instance |
-| `02-gpu-clusterpolicy.yaml` | NVIDIA GPU Operator config |
-| `03-dsc.yaml` | RHOAI DataScienceCluster (trimmed for SNO) |
-| `04-servingruntime.yaml` | Custom vLLM runtime (Gemma 4 compatible) |
-| `05-inferenceservice.yaml` | Gemma 4 E4B InferenceService |
-| `06-ols-secret.yaml` | Placeholder OLS credentials secret |
-| `07-olsconfig.yaml` | OLSConfig pointing at the KServe predictor |
-| `Containerfile` | OCI ModelCar image definition |
-| `build.sh` | HF download + image build + Quay push |
-| `README.md` | This file |
+```
+.
+├── 00-namespace.yaml ............ gemma-serving namespace
+├── 01-nfd.yaml .................. NodeFeatureDiscovery instance
+├── 02-gpu-clusterpolicy.yaml .... NVIDIA GPU Operator config
+├── 03-dsc.yaml .................. RHOAI DataScienceCluster (trimmed for SNO)
+├── 04-servingruntime.yaml ....... Custom vLLM runtime (Gemma 4 compatible)
+├── 05-inferenceservice.yaml ..... Gemma 4 E4B InferenceService
+├── 06-ols-secret.yaml ........... Placeholder OLS credentials secret
+├── 07-olsconfig.yaml ............ OLSConfig pointing at the KServe predictor
+├── Containerfile ................ OCI ModelCar image definition
+├── build.sh ..................... HF download + image build + Quay push
+├── VIDEO_SCRIPT.md .............. Script for the accompanying YouTube video
+├── ansible/
+│   ├── deploy.yml ............... Full deployment playbook (oc-based)
+│   ├── teardown.yml ............. Remove all CRs created by deploy.yml
+│   ├── README.md ................ Ansible-specific docs
+│   ├── inventory/hosts.ini ...... Localhost-only inventory
+│   └── group_vars/all.yml ....... Timeouts, GPU ID table, manifests dir
+├── LICENSE ...................... Apache 2.0
+├── .gitignore
+└── README.md .................... This file
+```
+
+## Disclaimer
+
+The projects and opinions in this repository are my own and are
+not official Red Hat positions or products.

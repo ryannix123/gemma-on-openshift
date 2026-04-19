@@ -1,0 +1,461 @@
+---
+# deploy.yml - Deploy OpenShift Lightspeed + Gemma 4 on Single Node OpenShift.
+#
+# This version uses ONLY the `oc` command -- no SSH, no kubernetes.core
+# collection, no Python Kubernetes library. Works anywhere `oc` works
+# and you're already logged in.
+#
+# Prerequisites (install these first via OperatorHub in the web console):
+#   - Node Feature Discovery Operator
+#   - NVIDIA GPU Operator
+#   - Red Hat OpenShift AI Operator
+#   - OpenShift Lightspeed Operator
+#
+# Also required on the machine running the playbook:
+#   - ansible-core 2.14+
+#   - `oc` CLI in PATH, already logged in as cluster-admin
+#     (verify: `oc whoami` should succeed)
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.ini deploy.yml
+#
+# Tags (run just one phase):
+#   --tags detect    -- GPU detection only
+#   --tags gpu       -- NFD + GPU Operator + CUDA validation
+#   --tags rhoai     -- DataScienceCluster
+#   --tags model     -- Namespace + ServingRuntime + InferenceService
+#   --tags ols       -- OLS secret + OLSConfig
+#   --tags validate  -- Smoke tests + summary only
+
+- name: "Deploy OpenShift Lightspeed + Gemma 4"
+  hosts: local
+  gather_facts: false
+
+  tasks:
+
+    ############################################################################
+    # PREFLIGHT: Verify `oc` is available and we're logged in.
+    ############################################################################
+    - name: "Preflight | Verify oc is in PATH"
+      ansible.builtin.command:
+        cmd: oc version --client=true -o json
+      register: oc_version
+      changed_when: false
+      failed_when: oc_version.rc != 0
+      tags: [always]
+
+    - name: "Preflight | Verify logged in"
+      # oc whoami returns the current user; if not logged in it exits nonzero.
+      # We don't verify cluster-admin explicitly here because the first
+      # manifest apply will fail clearly if the user lacks permissions --
+      # and parsing ClusterRoleBindings to determine "admin-ness" is a mess.
+      ansible.builtin.command:
+        cmd: oc whoami
+      register: oc_whoami
+      changed_when: false
+      failed_when: oc_whoami.rc != 0
+      tags: [always]
+
+    - name: "Preflight | Show current user and cluster"
+      ansible.builtin.command:
+        cmd: "{{ item }}"
+      register: cluster_info
+      changed_when: false
+      loop:
+        - "oc whoami"
+        - "oc whoami --show-server"
+      tags: [always]
+
+    - name: "Preflight | Display cluster context"
+      ansible.builtin.debug:
+        msg:
+          - "Logged in as: {{ cluster_info.results[0].stdout }}"
+          - "Cluster:      {{ cluster_info.results[1].stdout }}"
+      tags: [always]
+
+
+    ############################################################################
+    # PHASE 0: Detect the GPU on the SNO node using `oc debug node`.
+    ############################################################################
+    # The trick here is `oc debug node/<n>` -- it spawns a privileged
+    # debug pod on the target node with the host filesystem mounted at
+    # /host, and we chroot into it to run lspci. This is the canonical
+    # "run a command on an OCP node without SSH" pattern, and it works
+    # on RHCOS, SNO, and any other OCP node type.
+
+    - name: "Phase 0 | Get the SNO node name"
+      # SNO has exactly one node. For a multi-node cluster, you'd loop
+      # this over all nodes and aggregate results.
+      ansible.builtin.command:
+        cmd: oc get nodes -o jsonpath={.items[0].metadata.name}
+      register: node_name
+      changed_when: false
+      tags: [detect, gpu]
+
+    - name: "Phase 0 | Run lspci on the node via oc debug"
+      # --quiet suppresses the "Starting pod/..." and "Removing debug pod..."
+      # chatter so we only see lspci's output.
+      # chroot /host is required because the debug container has its own
+      # (minimal) filesystem and lspci lives on the host.
+      # We pipe to grep || true so the shell doesn't fail when no match --
+      # we want "no NVIDIA GPU" to be a logical condition, not a task error.
+      ansible.builtin.shell:
+        cmd: >
+          oc debug node/{{ node_name.stdout }} --quiet --
+          chroot /host lspci -nn 2>/dev/null | grep -iE 'vga|3d|display' || true
+      register: lspci_output
+      changed_when: false
+      tags: [detect, gpu]
+
+    - name: "Phase 0 | Show raw lspci output"
+      ansible.builtin.debug:
+        msg: "{{ lspci_output.stdout_lines }}"
+      tags: [detect, gpu]
+
+    - name: "Phase 0 | Parse NVIDIA device IDs from lspci output"
+      # Captures the 4-char hex device ID after the vendor ID in brackets.
+      # e.g. "[10de:2486]" -> "2486"
+      ansible.builtin.set_fact:
+        nvidia_devices: >-
+          {{
+            lspci_output.stdout_lines
+            | select('search', '(?i)nvidia')
+            | map('regex_search', '\[' + nvidia_pci_vendor_id + ':([0-9a-f]{4})\]', '\\1')
+            | select('truthy')
+            | flatten
+            | list
+          }}
+      tags: [detect, gpu]
+
+    - name: "Phase 0 | Fail if no NVIDIA GPU detected"
+      ansible.builtin.fail:
+        msg: |
+          No NVIDIA GPU detected on node {{ node_name.stdout }}.
+
+          This playbook requires an NVIDIA GPU for Gemma 4 inference.
+          Either:
+            - Install an NVIDIA GPU in the node and re-run
+            - Check that the GPU is properly seated and powered
+            - Verify directly with:
+                oc debug node/{{ node_name.stdout }} -- chroot /host lspci -nn | grep -i nvidia
+
+          If you intended to run CPU-only inference, this playbook isn't
+          the right tool -- use the Ollama-based CPU path instead.
+      when: nvidia_devices | length == 0
+      tags: [detect, gpu]
+
+    - name: "Phase 0 | Identify detected GPU model"
+      ansible.builtin.set_fact:
+        detected_gpu_id: "{{ nvidia_devices[0] }}"
+        detected_gpu_name: "{{ known_gpu_models[nvidia_devices[0]] | default('Unknown NVIDIA GPU (device ID: ' + nvidia_devices[0] + ')') }}"
+        gpu_detected: true
+      tags: [detect, gpu]
+
+    - name: "Phase 0 | Display detected GPU"
+      ansible.builtin.debug:
+        msg:
+          - "✓ NVIDIA GPU detected: {{ detected_gpu_name }}"
+          - "  Node:          {{ node_name.stdout }}"
+          - "  PCI device ID: {{ nvidia_pci_vendor_id }}:{{ detected_gpu_id }}"
+      tags: [detect, gpu]
+
+    - name: "Phase 0 | Warn on consumer GPUs that may need driver pinning"
+      ansible.builtin.debug:
+        msg: |
+          ⚠ NOTE: {{ detected_gpu_name }} is a consumer GPU. If the
+          nvidia-driver-daemonset CrashLoops during the next phase, you
+          may need to pin driver.version in 02-gpu-clusterpolicy.yaml
+          to a known-good build (e.g. 550.90.07).
+      when: detected_gpu_id in ['2484', '2486', '2487']  # 30-series consumer
+      tags: [detect, gpu]
+
+
+    ############################################################################
+    # PHASE 1: GPU plumbing -- NFD, GPU Operator ClusterPolicy, CUDA validation.
+    ############################################################################
+
+    - name: "Phase 1 | Apply NodeFeatureDiscovery CR"
+      ansible.builtin.command:
+        cmd: "oc apply -f {{ manifests_dir }}/01-nfd.yaml"
+      register: nfd_apply
+      changed_when: "'unchanged' not in nfd_apply.stdout"
+      tags: [gpu]
+
+    - name: "Phase 1 | Wait for NFD to label the node with NVIDIA PCI presence"
+      # Up to 3 min. NFD runs on a schedule and labels can take a minute
+      # or two to appear after the CR is created.
+      ansible.builtin.shell:
+        cmd: >
+          oc get node {{ node_name.stdout }}
+          -o jsonpath='{.metadata.labels.feature\.node\.kubernetes\.io/pci-{{ nvidia_pci_vendor_id }}\.present}'
+      register: nfd_label
+      changed_when: false
+      until: nfd_label.stdout == "true"
+      retries: 18
+      delay: 10
+      tags: [gpu]
+
+    - name: "Phase 1 | Apply NVIDIA GPU Operator ClusterPolicy"
+      ansible.builtin.command:
+        cmd: "oc apply -f {{ manifests_dir }}/02-gpu-clusterpolicy.yaml"
+      register: gpu_apply
+      changed_when: "'unchanged' not in gpu_apply.stdout"
+      tags: [gpu]
+
+    - name: "Phase 1 | Wait for nvidia-driver-daemonset to be Ready (5-10 min on first build)"
+      # oc wait with --for=condition=Ready is the cleanest way to express
+      # "I want this resource to reach a healthy state." For DaemonSets
+      # we wait on the pod, not the daemonset itself, because DS doesn't
+      # expose a Ready condition the same way.
+      ansible.builtin.command:
+        cmd: >
+          oc wait --for=condition=Ready pod
+          -l app=nvidia-driver-daemonset
+          -n nvidia-gpu-operator
+          --timeout={{ timeout_driver_build }}s
+      register: driver_wait
+      changed_when: false
+      tags: [gpu]
+
+    - name: "Phase 1 | Wait for nvidia-device-plugin-daemonset pod to be Ready"
+      ansible.builtin.command:
+        cmd: >
+          oc wait --for=condition=Ready pod
+          -l app=nvidia-device-plugin-daemonset
+          -n nvidia-gpu-operator
+          --timeout=300s
+      changed_when: false
+      tags: [gpu]
+
+    - name: "Phase 1 | Delete any leftover CUDA validation pod from a previous run"
+      # oc wait on a terminated pod won't work, so we always start fresh.
+      # --ignore-not-found keeps this idempotent.
+      ansible.builtin.command:
+        cmd: oc delete pod cuda-vectoradd-test -n default --ignore-not-found --wait=true
+      changed_when: false
+      tags: [gpu]
+
+    - name: "Phase 1 | Create CUDA vectoradd validation pod"
+      ansible.builtin.shell:
+        # Here-doc into oc apply is the cleanest way to inline a small
+        # manifest without a separate file. Could also use `oc run` but
+        # that doesn't support GPU resource limits in one line.
+        cmd: |
+          cat <<'EOF' | oc apply -f -
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: cuda-vectoradd-test
+            namespace: default
+          spec:
+            restartPolicy: Never
+            containers:
+              - name: cuda-vectoradd
+                image: nvcr.io/nvidia/k8s/cuda-sample:vectoradd-cuda11.7.1-ubuntu20.04
+                resources:
+                  limits:
+                    nvidia.com/gpu: 1
+          EOF
+      changed_when: true
+      tags: [gpu]
+
+    - name: "Phase 1 | Wait for CUDA test pod to complete (Succeeded or Failed)"
+      # We want to wait for EITHER Succeeded or Failed phase, not the
+      # Ready condition (Ready goes false when the pod terminates).
+      # Easiest way with oc is to poll phase via jsonpath.
+      ansible.builtin.command:
+        cmd: >
+          oc get pod cuda-vectoradd-test -n default
+          -o jsonpath={.status.phase}
+      register: cuda_phase
+      changed_when: false
+      until: cuda_phase.stdout in ['Succeeded', 'Failed']
+      retries: 20
+      delay: 15
+      tags: [gpu]
+
+    - name: "Phase 1 | Show CUDA test pod logs"
+      ansible.builtin.command:
+        cmd: oc logs cuda-vectoradd-test -n default
+      register: cuda_logs
+      changed_when: false
+      tags: [gpu]
+
+    - name: "Phase 1 | Display CUDA test result"
+      ansible.builtin.debug:
+        msg: "{{ cuda_logs.stdout_lines }}"
+      tags: [gpu]
+
+    - name: "Phase 1 | Assert CUDA test passed"
+      ansible.builtin.assert:
+        that:
+          - cuda_phase.stdout == 'Succeeded'
+        fail_msg: "CUDA vectoradd test failed. See logs above."
+        success_msg: "✓ GPU is visible and usable from pods."
+      tags: [gpu]
+
+    - name: "Phase 1 | Clean up CUDA test pod"
+      ansible.builtin.command:
+        cmd: oc delete pod cuda-vectoradd-test -n default --ignore-not-found
+      changed_when: true
+      tags: [gpu]
+
+
+    ############################################################################
+    # PHASE 2: RHOAI DataScienceCluster.
+    ############################################################################
+
+    - name: "Phase 2 | Apply DataScienceCluster"
+      ansible.builtin.command:
+        cmd: "oc apply -f {{ manifests_dir }}/03-dsc.yaml"
+      register: dsc_apply
+      changed_when: "'unchanged' not in dsc_apply.stdout"
+      tags: [rhoai]
+
+    - name: "Phase 2 | Wait for KServe controller to be Ready"
+      # NOTE: If this times out, the label selector is wrong. Check with:
+      #   oc -n redhat-ods-applications get pods --show-labels
+      # and update the -l flag below.
+      ansible.builtin.command:
+        cmd: >
+          oc wait --for=condition=Ready pod
+          -l control-plane=kserve-controller-manager
+          -n redhat-ods-applications
+          --timeout={{ timeout_operator_ready }}s
+      changed_when: false
+      tags: [rhoai]
+
+
+    ############################################################################
+    # PHASE 3: Namespace, ServingRuntime, InferenceService.
+    ############################################################################
+
+    - name: "Phase 3 | Apply gemma-serving namespace"
+      ansible.builtin.command:
+        cmd: "oc apply -f {{ manifests_dir }}/00-namespace.yaml"
+      register: ns_apply
+      changed_when: "'unchanged' not in ns_apply.stdout"
+      tags: [model]
+
+    - name: "Phase 3 | Apply vLLM ServingRuntime"
+      ansible.builtin.command:
+        cmd: "oc apply -f {{ manifests_dir }}/04-servingruntime.yaml"
+      register: sr_apply
+      changed_when: "'unchanged' not in sr_apply.stdout"
+      tags: [model]
+
+    - name: "Phase 3 | Apply Gemma 4 InferenceService"
+      ansible.builtin.command:
+        cmd: "oc apply -f {{ manifests_dir }}/05-inferenceservice.yaml"
+      register: isvc_apply
+      changed_when: "'unchanged' not in isvc_apply.stdout"
+      tags: [model]
+
+    - name: "Phase 3 | Wait for predictor pod to be Ready (5-10 min for OCI pull + vLLM load)"
+      ansible.builtin.command:
+        cmd: >
+          oc wait --for=condition=Ready pod
+          -l serving.kserve.io/inferenceservice=gemma-4-e4b
+          -n gemma-serving
+          --timeout={{ timeout_pod_ready }}s
+      changed_when: false
+      tags: [model]
+
+    - name: "Phase 3 | Get predictor pod name"
+      ansible.builtin.command:
+        cmd: >
+          oc get pod -n gemma-serving
+          -l serving.kserve.io/inferenceservice=gemma-4-e4b
+          -o jsonpath={.items[0].metadata.name}
+      register: predictor_pod
+      changed_when: false
+      tags: [model, validate]
+
+    - name: "Phase 3 | Smoke test the predictor directly (exec into pod)"
+      # oc exec into the pod and hit localhost:8080. This avoids needing
+      # a port-forward and proves the predictor responds before OLS ever
+      # sees it.
+      #
+      # We use `ansible.builtin.shell` (not `command`) so that the JSON
+      # payload with its double-quotes and braces survives without
+      # needing to escape every character. The outer single quotes
+      # protect the inner double quotes from shell parsing.
+      ansible.builtin.shell:
+        cmd: >
+          oc exec -n gemma-serving {{ predictor_pod.stdout }} --
+          curl -sS -m 30 -X POST http://localhost:8080/v1/chat/completions
+          -H 'Content-Type: application/json'
+          -d '{"model":"gemma-4-e4b","messages":[{"role":"user","content":"Say OK"}],"max_tokens":10}'
+      register: smoke_test
+      changed_when: false
+      failed_when:
+        - smoke_test.rc != 0 or 'choices' not in smoke_test.stdout
+      tags: [model, validate]
+
+    - name: "Phase 3 | Show smoke test response"
+      ansible.builtin.debug:
+        msg: "{{ smoke_test.stdout }}"
+      tags: [model, validate]
+
+
+    ############################################################################
+    # PHASE 4: OpenShift Lightspeed wiring.
+    ############################################################################
+
+    - name: "Phase 4 | Apply OLS credentials secret"
+      ansible.builtin.command:
+        cmd: "oc apply -f {{ manifests_dir }}/06-ols-secret.yaml"
+      register: secret_apply
+      changed_when: "'unchanged' not in secret_apply.stdout"
+      tags: [ols]
+
+    - name: "Phase 4 | Apply OLSConfig"
+      ansible.builtin.command:
+        cmd: "oc apply -f {{ manifests_dir }}/07-olsconfig.yaml"
+      register: ols_apply
+      changed_when: "'unchanged' not in ols_apply.stdout"
+      tags: [ols]
+
+    - name: "Phase 4 | Wait for lightspeed-app-server to be Ready"
+      ansible.builtin.command:
+        cmd: >
+          oc wait --for=condition=Ready pod
+          -l app.kubernetes.io/component=lightspeed-service-api
+          -n openshift-lightspeed
+          --timeout={{ timeout_pod_ready }}s
+      changed_when: false
+      tags: [ols]
+
+
+    ############################################################################
+    # PHASE 5: Final validation and summary.
+    ############################################################################
+
+    - name: "Phase 5 | Get OLS console route"
+      ansible.builtin.command:
+        cmd: >
+          oc get route console -n openshift-console
+          -o jsonpath={.spec.host}
+      register: console_host
+      changed_when: false
+      tags: [validate]
+
+    - name: "Phase 5 | Print success summary"
+      ansible.builtin.debug:
+        msg:
+          - "════════════════════════════════════════════════════════════"
+          - "✓ OpenShift Lightspeed + Gemma 4 deployment complete"
+          - "════════════════════════════════════════════════════════════"
+          - "GPU:          {{ detected_gpu_name | default('(not detected this run)') }}"
+          - "Model:        Gemma 4 E4B-IT"
+          - "Predictor:    gemma-4-e4b-predictor.gemma-serving.svc"
+          - "OLS console:  https://{{ console_host.stdout }}"
+          - "════════════════════════════════════════════════════════════"
+          - "Next steps:"
+          - "  1. Open the console URL above"
+          - "  2. Click the Lightspeed sparkle icon (top-right)"
+          - "  3. Ask: 'How do I create a PVC with the LVM storage class?'"
+          - "  4. Watch vLLM logs:"
+          - "       oc -n gemma-serving logs -f deployment/gemma-4-e4b-predictor"
+          - "════════════════════════════════════════════════════════════"
+      tags: [validate]
