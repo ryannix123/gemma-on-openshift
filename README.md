@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="images/logo.jpg" alt="Gemma on OpenShift" width="500">
+</p>
+
 # OpenShift Lightspeed + Gemma 4 on Single Node OpenShift
 
 A homelab-scale reference architecture for running Red Hat OpenShift
@@ -254,13 +258,7 @@ That's it. The OLSConfig (`manifests/07-olsconfig.yaml`) doesn't change at all.
 └── README.md .................... This file
 ```
 
-## Video
-
-A walkthrough video covering this reference architecture is in
-production. See [`VIDEO_SCRIPT.md`](VIDEO_SCRIPT.md) for the script,
-shot list, and pre-production checklist.
-
 ## Disclaimer
 
-The projects and opinions in this repository are Ryan's own and are
+The projects and opinions in this repository are my own and are
 not official Red Hat positions or products.
