@@ -70,7 +70,7 @@ Just detect the GPU (no cluster changes made):
 ansible-playbook -i inventory/hosts.ini deploy.yml --tags detect
 ```
 
-Re-apply just the OLS config (after tweaking `07-olsconfig.yaml`):
+Re-apply just the OLS config (after tweaking `manifests/07-olsconfig.yaml`):
 
 ```bash
 ansible-playbook -i inventory/hosts.ini deploy.yml --tags ols
@@ -152,7 +152,7 @@ the operator to be installed first.
 GPU), the NVIDIA driver build can fail. Check pod logs:
 `oc -n nvidia-gpu-operator logs -l app=nvidia-driver-daemonset`. If
 you see driver version issues, pin `driver.version` in
-`02-gpu-clusterpolicy.yaml` to a known-good build (e.g. `550.90.07`)
+`manifests/02-gpu-clusterpolicy.yaml` to a known-good build (e.g. `550.90.07`)
 and re-run with `--tags gpu`.
 
 **KServe wait times out in Phase 2.** The label selector
@@ -173,4 +173,4 @@ oc exec -n gemma-serving <predictor-pod> -- curl -s http://localhost:8080/v1/mod
 ```
 
 The `id` field in that response must match `--served-model-name` in
-`04-servingruntime.yaml` and `models[].name` in `07-olsconfig.yaml`.
+`manifests/04-servingruntime.yaml` and `models[].name` in `manifests/07-olsconfig.yaml`.

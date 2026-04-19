@@ -65,28 +65,28 @@ under the hood — no extra Python dependencies, no SSH required.
    Wait for each to reach Succeeded before installing the next.
 
 2. **Have a Quay account** at `quay.io/ryan_nix` (or update the image
-   references in `05-inferenceservice.yaml` and `build.sh` to your own
-   namespace).
+   references in `manifests/05-inferenceservice.yaml` and `build.sh`
+   to your own namespace).
 
 3. **Accept the Gemma license** on Hugging Face:
    https://huggingface.co/google/gemma-4-e4b-it
    Then `huggingface-cli login` or export `HF_TOKEN`.
 
-4. **Verify vLLM image tag** in `04-servingruntime.yaml` actually
-   supports Gemma 4. The tag in the file is a placeholder — check
-   vLLM release notes and update before applying. **This is the most
-   likely thing to break.**
+4. **Verify vLLM image tag** in `manifests/04-servingruntime.yaml`
+   actually supports Gemma 4. The tag in the file is a placeholder —
+   check vLLM release notes and update before applying. **This is
+   the most likely thing to break.**
 
 ## Apply order (manual path)
 
 ```bash
 # Phase 1: GPU plumbing
-oc apply -f 01-nfd.yaml
+oc apply -f manifests/01-nfd.yaml
 # Wait ~60s for NFD to label the node, then verify:
 oc get nodes -o json | jq '.items[].metadata.labels' | grep 10de
 # You should see: "feature.node.kubernetes.io/pci-10de.present": "true"
 
-oc apply -f 02-gpu-clusterpolicy.yaml
+oc apply -f manifests/02-gpu-clusterpolicy.yaml
 # This takes 5-10 min on first apply (driver build). Watch:
 oc -n nvidia-gpu-operator get pods -w
 # Wait until nvidia-driver-daemonset, nvidia-device-plugin-daemonset,
@@ -113,7 +113,7 @@ oc -n default logs cuda-vectoradd-test
 oc -n default delete pod cuda-vectoradd-test
 
 # Phase 2: OpenShift AI
-oc apply -f 03-dsc.yaml
+oc apply -f manifests/03-dsc.yaml
 # Watch the RHOAI pods come up:
 oc -n redhat-ods-applications get pods -w
 # Wait for kserve-controller-manager and odh-model-controller to be
@@ -127,9 +127,9 @@ chmod +x build.sh
 # Quay. Will take a while on first run.
 
 # Phase 4: Deploy the model
-oc apply -f 00-namespace.yaml
-oc apply -f 04-servingruntime.yaml
-oc apply -f 05-inferenceservice.yaml
+oc apply -f manifests/00-namespace.yaml
+oc apply -f manifests/04-servingruntime.yaml
+oc apply -f manifests/05-inferenceservice.yaml
 # Watch the predictor pod come up:
 oc -n gemma-serving get pods -w
 # First start is slow: KServe pulls the OCI image (~10GB), copies
@@ -152,8 +152,8 @@ curl -s http://localhost:8080/v1/chat/completions \
 kill %1  # stop port-forward
 
 # Phase 5: Wire OLS
-oc apply -f 06-ols-secret.yaml
-oc apply -f 07-olsconfig.yaml
+oc apply -f manifests/06-ols-secret.yaml
+oc apply -f manifests/07-olsconfig.yaml
 oc -n openshift-lightspeed get pods -w
 # Wait for lightspeed-app-server to be Running.
 ```
@@ -200,12 +200,12 @@ oc -n nvidia-gpu-operator exec -it ds/nvidia-driver-daemonset -- nvidia-smi
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `nvidia-driver-daemonset` CrashLoop | Driver version doesn't support 3060 Ti | Pin `driver.version` in `02-gpu-clusterpolicy.yaml` to a known-good build (e.g. `550.90.07`) and re-apply |
+| `nvidia-driver-daemonset` CrashLoop | Driver version doesn't support 3060 Ti | Pin `driver.version` in `manifests/02-gpu-clusterpolicy.yaml` to a known-good build (e.g. `550.90.07`) and re-apply |
 | `cuda-vectoradd-test` pod fails | GPU Operator not fully ready | Wait longer; check `nvidia-operator-validator` logs |
 | Predictor pod stuck `Init` | OCI image pull slow | Normal on first deploy; check `oc describe pod` for image pull progress |
-| vLLM container CrashLoop with "unsupported model architecture" | vLLM image too old for Gemma 4 | Update `image:` in `04-servingruntime.yaml` to a newer tag |
-| vLLM CrashLoop with CUDA OOM | KV cache too big for 8GB | Lower `--max-model-len` and/or `--gpu-memory-utilization` in `04-servingruntime.yaml` |
-| OLS pod CrashLoop with "model not found" | Model name mismatch | `curl /v1/models` against the predictor, copy the exact `id` into `07-olsconfig.yaml` `models[].name` |
+| vLLM container CrashLoop with "unsupported model architecture" | vLLM image too old for Gemma 4 | Update `image:` in `manifests/04-servingruntime.yaml` to a newer tag |
+| vLLM CrashLoop with CUDA OOM | KV cache too big for 8GB | Lower `--max-model-len` and/or `--gpu-memory-utilization` in `manifests/04-servingruntime.yaml` |
+| OLS pod CrashLoop with "model not found" | Model name mismatch | `curl /v1/models` against the predictor, copy the exact `id` into `manifests/07-olsconfig.yaml` `models[].name` |
 | OLS connects but answers are gibberish | Wrong chat template | Add `--chat-template` arg to ServingRuntime pointing at correct Jinja file |
 | OLS pod can't reach predictor | Wrong service name/URL | Verify with `oc -n gemma-serving get svc`; the service is `<isvc-name>-predictor` in RawDeployment mode |
 
@@ -216,7 +216,7 @@ homelab and pilot. Only three things change:
 
 1. **Model size**: Build a new OCI image with `google/gemma-4-26b-a4b-it`
    instead of E4B. Push as `quay.io/ryan_nix/gemma-4-26b-a4b-it:v1`.
-   Update `storageUri` in `05-inferenceservice.yaml`.
+   Update `storageUri` in `manifests/05-inferenceservice.yaml`.
 
 2. **vLLM args**: Drop `--enforce-eager`, raise `--max-model-len` to
    32768 or higher, raise `--max-num-seqs` to 16-32 for real
@@ -226,35 +226,41 @@ homelab and pilot. Only three things change:
    to `Serverless` if the customer wants scale-to-zero. Costs
    Knative + Istio overhead but is the more "enterprise" pattern.
 
-That's it. The OLSConfig (`07-olsconfig.yaml`) doesn't change at all.
+That's it. The OLSConfig (`manifests/07-olsconfig.yaml`) doesn't change at all.
 
 ## Repository layout
 
 ```
 .
-├── 00-namespace.yaml ............ gemma-serving namespace
-├── 01-nfd.yaml .................. NodeFeatureDiscovery instance
-├── 02-gpu-clusterpolicy.yaml .... NVIDIA GPU Operator config
-├── 03-dsc.yaml .................. RHOAI DataScienceCluster (trimmed for SNO)
-├── 04-servingruntime.yaml ....... Custom vLLM runtime (Gemma 4 compatible)
-├── 05-inferenceservice.yaml ..... Gemma 4 E4B InferenceService
-├── 06-ols-secret.yaml ........... Placeholder OLS credentials secret
-├── 07-olsconfig.yaml ............ OLSConfig pointing at the KServe predictor
-├── Containerfile ................ OCI ModelCar image definition
-├── build.sh ..................... HF download + image build + Quay push
-├── VIDEO_SCRIPT.md .............. Script for the accompanying YouTube video
+├── manifests/
+│   ├── 00-namespace.yaml ........ gemma-serving namespace
+│   ├── 01-nfd.yaml .............. NodeFeatureDiscovery instance
+│   ├── 02-gpu-clusterpolicy.yaml  NVIDIA GPU Operator config
+│   ├── 03-dsc.yaml .............. RHOAI DataScienceCluster (trimmed for SNO)
+│   ├── 04-servingruntime.yaml ... Custom vLLM runtime (Gemma 4 compatible)
+│   ├── 05-inferenceservice.yaml . Gemma 4 E4B InferenceService
+│   ├── 06-ols-secret.yaml ....... Placeholder OLS credentials secret
+│   └── 07-olsconfig.yaml ........ OLSConfig pointing at the KServe predictor
 ├── ansible/
 │   ├── deploy.yml ............... Full deployment playbook (oc-based)
 │   ├── teardown.yml ............. Remove all CRs created by deploy.yml
 │   ├── README.md ................ Ansible-specific docs
 │   ├── inventory/hosts.ini ...... Localhost-only inventory
 │   └── group_vars/all.yml ....... Timeouts, GPU ID table, manifests dir
-├── LICENSE ...................... Apache 2.0
+├── Containerfile ................ OCI ModelCar image definition
+├── build.sh ..................... HF download + image build + Quay push
+├── VIDEO_SCRIPT.md .............. Script for the accompanying YouTube video
 ├── .gitignore
 └── README.md .................... This file
 ```
 
+## Video
+
+A walkthrough video covering this reference architecture is in
+production. See [`VIDEO_SCRIPT.md`](VIDEO_SCRIPT.md) for the script,
+shot list, and pre-production checklist.
+
 ## Disclaimer
 
-The projects and opinions in this repository are my own and are
+The projects and opinions in this repository are Ryan's own and are
 not official Red Hat positions or products.
