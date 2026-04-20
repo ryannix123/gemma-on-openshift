@@ -17,19 +17,31 @@ through your account team.
 
 ## What this builds
 
+Three namespaces cooperating. The **model itself** runs in
+`gemma-serving`. **OpenShift AI** manages it from
+`redhat-ods-applications`. The **NVIDIA driver** provides the GPU
+from `nvidia-gpu-operator`. And **OpenShift Lightspeed** calls the
+model over in-cluster DNS from `openshift-lightspeed`.
+
 ```
-OpenShift Lightspeed (openshift-lightspeed ns)
-        |
-        v  HTTP /v1/chat/completions
-        |
-KServe InferenceService (gemma-serving ns)
-   = vLLM ServingRuntime
-   + Gemma 4 E4B-IT (OCI ModelCar image from Quay)
-   + nvidia.com/gpu: 1
-        |
-        v
-NVIDIA 3060 Ti (8GB VRAM)
+openshift-lightspeed              gemma-serving
+────────────────────              ─────────────
+lightspeed-app-server  ────HTTP──►  gemma-4-e4b-predictor (vLLM + Gemma 4)
+                                         │
+                                         │ requests nvidia.com/gpu: 1
+                                         ▼
+                                   [ NVIDIA RTX 3060 Ti ]
+                                         ▲
+                        ┌────────────────┴────────────────┐
+          reconciled by │                                 │ driver from
+                        │                                 │
+              redhat-ods-applications             nvidia-gpu-operator
+              (KServe controller)                 (driver DaemonSet)
 ```
+
+For a full walkthrough of what runs where, namespace responsibilities,
+the end-to-end request path, and what changes at production scale,
+see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Hardware target
 
@@ -251,14 +263,52 @@ That's it. The OLSConfig (`manifests/07-olsconfig.yaml`) doesn't change at all.
 │   ├── README.md ................ Ansible-specific docs
 │   ├── inventory/hosts.ini ...... Localhost-only inventory
 │   └── group_vars/all.yml ....... Timeouts, GPU ID table, manifests dir
+├── .github/workflows/
+│   └── build-model-image.yml .... CI/CD: build and push Gemma 4 image to Quay
+├── images/
+│   └── logo.jpg ................. Project logo
 ├── Containerfile ................ OCI ModelCar image definition
 ├── build.sh ..................... HF download + image build + Quay push
-├── VIDEO_SCRIPT.md .............. Script for the accompanying YouTube video
+├── ARCHITECTURE.md .............. Namespace and component architecture
 ├── .gitignore
 └── README.md .................... This file
 ```
 
+## CI/CD
+
+The repo includes a GitHub Actions workflow at
+`.github/workflows/build-model-image.yml` that rebuilds the Gemma 4
+OCI model image and pushes it to Quay. It runs on manual dispatch
+(with a user-supplied tag) and automatically on changes to
+`Containerfile` or `build.sh`.
+
+To enable it, configure three secrets in your GitHub repo
+(Settings → Secrets and variables → Actions):
+
+| Secret | What it is |
+|---|---|
+| `HF_TOKEN` | Hugging Face fine-grained read token scoped to `google/gemma-4-e4b-it` |
+| `QUAY_USERNAME` | Quay robot account name (e.g. `ryan_nix+github_actions`) |
+| `QUAY_TOKEN` | Quay robot account password |
+
+Use a **robot account**, not your personal Quay credentials — scope
+the robot to write access on just the `gemma-4-e4b-it` repository.
+Same for the HF token: fine-grained, read-only, one model.
+
+The workflow runs on GitHub-hosted runners with aggressive disk
+cleanup to fit the ~10GB weights download plus the built image. This
+works for E4B. When you move to Gemma 4 26B-A4B for the pilot
+architecture, switch to a self-hosted runner on your OCP cluster —
+the 26B image is too big for GitHub-hosted runners even after
+cleanup.
+
+## Video
+
+A walkthrough video covering this reference architecture is in
+production. See [`VIDEO_SCRIPT.md`](VIDEO_SCRIPT.md) for the script,
+shot list, and pre-production checklist.
+
 ## Disclaimer
 
-The projects and opinions in this repository are my own and are
+The projects and opinions in this repository are Ryan's own and are
 not official Red Hat positions or products.
