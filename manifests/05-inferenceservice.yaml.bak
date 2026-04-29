@@ -38,7 +38,7 @@ spec:
       runtime: vllm-gemma4
       # OCI image built from ./Containerfile, pushed to your Quay.
       # Update the tag as you iterate.
-      storageUri: oci://quay.io/ryan_nix/gemma-4-e4b-it:v2
+      storageUri: oci://quay.io/ryan_nix/gemma-4-e4b-it:v1
       resources:
         limits:
           nvidia.com/gpu: "1"
