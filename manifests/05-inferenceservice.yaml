@@ -21,7 +21,7 @@
 apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
 metadata:
-  name: granite-4.1-3b
+  name: granite-41-3b
   namespace: gemma-serving
   annotations:
     serving.kserve.io/deploymentMode: RawDeployment
@@ -38,7 +38,7 @@ spec:
       runtime: vllm-gemma4
       # OCI image built from ./Containerfile, pushed to your Quay.
       # Update the tag as you iterate.
-      storageUri: oci://quay.io/ryan_nix/granite-4.1-3b-instruct:v1
+      storageUri: oci://quay.io/ryan_nix/granite4-llm:v1
       resources:
         limits:
           nvidia.com/gpu: "1"

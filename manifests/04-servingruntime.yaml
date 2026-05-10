@@ -24,7 +24,7 @@
 #   --max-num-seqs=4            Concurrency cap. One demo user, no need for
 #                               batched throughput. Smaller batch -> smaller
 #                               KV cache.
-#   --gpu-memory-utilization=0.90  vLLM is allowed to use up to 92% of the
+#   --gpu-memory-utilization=0.95  vLLM is allowed to use up to 92% of the
 #                                  card's 8 GB. Leaves headroom for the
 #                                  driver and CUDA contexts.
 #   --enforce-eager             Skip CUDA graph capture, saves ~500 MB VRAM
@@ -67,10 +67,10 @@ spec:
       args:
         - "--port=8080"
         - "--model=/mnt/models"
-        - "--served-model-name=granite-4.1-3b"
+        - "--served-model-name=granite-41-3b"
         - "--max-model-len=8192"
         - "--max-num-seqs=4"
-        - "--gpu-memory-utilization=0.90"
+        - "--gpu-memory-utilization=0.95"
         - "--enforce-eager"
       env:
         - name: HF_HUB_OFFLINE
