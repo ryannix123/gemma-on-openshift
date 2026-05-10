@@ -20,8 +20,8 @@
 
 set -euo pipefail
 
-MODEL_ID="google/gemma-4-E4B-it"
-IMAGE_REPO="quay.io/ryan_nix/gemma-4-e4b-it"
+MODEL_ID="ibm-granite/granite-4.1-3b"
+IMAGE_REPO="quay.io/ryan_nix/granite-4.1-3b-instruct"
 TAG="${1:-v1}"
 BUILD_DIR="$(cd "$(dirname "$0")" && pwd)"
 MODEL_DIR="${BUILD_DIR}/model"

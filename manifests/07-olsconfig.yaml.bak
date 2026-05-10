@@ -6,11 +6,11 @@
 #   http://<isvc-name>-predictor.<namespace>.svc.cluster.local:80/v1
 #
 # The model name MUST exactly match what vLLM advertises as the model
-# ID. We set it via --served-model-name=granite-4.1-3b in the
+# ID. We set it via --served-model-name=gemma-4-e2b in the
 # ServingRuntime args, so that's what we reference here.
 #
 # Verify after applying with:
-#   oc -n gemma-serving port-forward svc/granite-4.1-3b-predictor 8080:80
+#   oc -n gemma-serving port-forward svc/gemma-4-e2b-predictor 8080:80
 #   curl -s http://localhost:8080/v1/models | jq
 # The "id" field in the response is what must match models[].name below.
 #
@@ -29,13 +29,13 @@ spec:
     providers:
       - name: gemma-rhoai
         type: openai
-        url: 'http://granite-4.1-3b-predictor.gemma-serving.svc.cluster.local/v1'
+        url: 'http://gemma-4-e2b-predictor.gemma-serving.svc.cluster.local/v1'
         credentialsSecretRef:
           name: gemma-creds
         models:
-          - name: granite-4.1-3b
+          - name: gemma-4-e2b
   ols:
-    defaultModel: granite-4.1-3b
+    defaultModel: gemma-4-e2b
     defaultProvider: gemma-rhoai
     logLevel: INFO
     deployment:

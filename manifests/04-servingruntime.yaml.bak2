@@ -6,7 +6,7 @@
 #
 # Image:
 #   We use Red Hat AI Inference Server's Gemma 4 tech-preview image
-#   (registry.redhat.io/rhoai/odh-vllm-cuda-rhel9@sha256:9302ffc252b8681317b4d40ce8b4e66a5db3511f08f6a1ff6d34e595023f85c5). RHOAI 2.25's
+#   (registry.redhat.io/rhaii-preview/vllm-cuda-rhel9:gemma4). RHOAI 2.25's
 #   default vLLM image (odh-vllm-cuda-rhel9 v2.25.6) ships a vLLM build
 #   from before Gemma 4 was released, so it lacks the gemma4 architecture
 #   support. The rhaii-preview image was rebuilt explicitly for Gemma 4
@@ -19,18 +19,20 @@
 #   RHOAI vLLM-CUDA image.
 #
 # Args explained:
-#   --max-model-len=8192        Reduced from upstream default to fit KV cache
+#   --max-model-len=4096        Reduced from upstream default to fit KV cache
 #                               in 8 GB. OLS prompts comfortably fit in 4K.
-#   --max-num-seqs=4            Concurrency cap. One demo user, no need for
+#   --max-num-seqs=2            Concurrency cap. One demo user, no need for
 #                               batched throughput. Smaller batch -> smaller
 #                               KV cache.
-#   --gpu-memory-utilization=0.90  vLLM is allowed to use up to 92% of the
+#   --gpu-memory-utilization=0.92  vLLM is allowed to use up to 92% of the
 #                                  card's 8 GB. Leaves headroom for the
 #                                  driver and CUDA contexts.
 #   --enforce-eager             Skip CUDA graph capture, saves ~500 MB VRAM
 #                               on 8 GB cards. Slightly slower but fits.
+#   --quantization=fp8          Load weights in 8-bit floating point at
 #                               load time. Roughly halves weights memory
 #                               (~8 GB bf16 -> ~4 GB fp8).
+#   --kv-cache-dtype=fp8        KV cache also in fp8. Doubles effective
 #                               context capacity per byte of VRAM.
 #   --limit-mm-per-prompt       Tell vLLM not to allocate VRAM for the
 #                               vision and audio multimodal encoders.
@@ -59,7 +61,7 @@ spec:
       name: vLLM
   containers:
     - name: kserve-container
-      image: registry.redhat.io/rhoai/odh-vllm-cuda-rhel9@sha256:9302ffc252b8681317b4d40ce8b4e66a5db3511f08f6a1ff6d34e595023f85c5
+      image: registry.redhat.io/rhaii-preview/vllm-cuda-rhel9:gemma4
       command:
         - python
         - -m
@@ -67,11 +69,14 @@ spec:
       args:
         - "--port=8080"
         - "--model=/mnt/models"
-        - "--served-model-name=granite-4.1-3b"
-        - "--max-model-len=8192"
-        - "--max-num-seqs=4"
-        - "--gpu-memory-utilization=0.90"
+        - "--served-model-name=gemma-4-e4b"
+        - "--max-model-len=4096"
+        - "--max-num-seqs=2"
+        - "--gpu-memory-utilization=0.92"
         - "--enforce-eager"
+        - "--quantization=fp8"
+        - "--kv-cache-dtype=fp8"
+        - '--limit-mm-per-prompt={"image": 0, "audio": 0}'
       env:
         - name: HF_HUB_OFFLINE
           value: "1"
