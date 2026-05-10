@@ -1,7 +1,7 @@
 # Architecture
 
 This document describes the component and namespace architecture of
-the OpenShift Lightspeed + Gemma 4 reference design. For setup
+the OpenShift Lightspeed self-hosted LLM reference design. For setup
 instructions, see the [main README](README.md). For the automation
 playbook, see [ansible/README.md](ansible/README.md).
 
@@ -27,19 +27,19 @@ own them at an enterprise customer:
 └──────────────────────────────────────────────────────────────────┘
                 │
                 │  in-cluster Service DNS:
-                │  gemma-4-e4b-predictor.gemma-serving.svc
+                │  granite-41-3b-predictor.gemma-serving.svc:8080
                 │
                 ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │                                                                  │
-│  gemma-serving  (your project namespace)                         │
+│  gemma-serving  (model workload namespace)                       │
 │  ─────────────                                                   │
 │                                                                  │
 │    ┌─────────────────────────────────────┐                       │
-│    │ gemma-4-e4b-predictor-<hash>        │                       │
+│    │ granite-41-3b-predictor-<hash>      │                       │
 │    │                                     │                       │
 │    │   Container: vLLM OpenAI server     │                       │
-│    │     ├─ loads Gemma 4 E4B weights    │                       │
+│    │     ├─ loads Granite 4.1 3B weights │                       │
 │    │     ├─ serves /v1/chat/completions  │                       │
 │    │     └─ requests nvidia.com/gpu: 1   │──┐                    │
 │    └─────────────────────────────────────┘  │                    │
@@ -82,12 +82,12 @@ own them at an enterprise customer:
 This is the namespace you created. Two things exist here:
 
 - **The `InferenceService` custom resource** — a declarative spec
-  that says "I want a vLLM-backed Gemma 4 model served from this OCI
-  image with this much GPU." It's just a YAML document until the
-  KServe controller reconciles it.
+  that says "I want a vLLM-backed model served from this OCI image
+  with this much GPU." It's just a YAML document until the KServe
+  controller reconciles it.
 - **The predictor pod** — the actual running container, created by
   KServe as a result of reconciling the InferenceService. This is
-  where vLLM loads the Gemma weights onto the GPU and serves
+  where vLLM loads the model weights onto the GPU and serves
   `/v1/chat/completions`. It consumes `nvidia.com/gpu: 1`.
 
 The namespace boundary matters for three reasons:
@@ -101,7 +101,7 @@ The namespace boundary matters for three reasons:
    actual inference cost (GPU memory, CPU, RAM). That's the number
    finance and procurement want, not the RHOAI control plane's
    overhead.
-3. **Multi-model scaling.** A second project (e.g. a tuned Granite
+3. **Multi-model scaling.** A second project (e.g. a tuned model
    for a different use case) would live in a second namespace
    alongside this one, reconciled by the same platform in
    `redhat-ods-applications`. One platform, N serving projects.
@@ -121,10 +121,10 @@ control-plane components live here:
 
 **Nothing your model needs to serve traffic lives here.** The
 platform is a deployer and manager, not a runtime. If you kill the
-`kserve-controller-manager` pod, your `gemma-serving` predictor keeps
-answering requests until someone deletes its underlying Deployment.
-That decoupling is intentional and important — platform restarts
-don't break inference.
+`kserve-controller-manager` pod, your predictor keeps answering
+requests until someone deletes its underlying Deployment. That
+decoupling is intentional and important — platform restarts don't
+break inference.
 
 ### `nvidia-gpu-operator` — the driver plane
 
@@ -151,20 +151,46 @@ When a user types a question into the OLS console in the OCP web UI:
 1. **Browser → OCP console → OLS API.** The request lands at the
    `lightspeed-app-server` pod in `openshift-lightspeed`.
 2. **OLS builds the prompt.** Pulls in OCP documentation context,
-   applies any BYOK RAG index, assembles the system prompt plus the
+   applies any RAG index, assembles the system prompt plus the
    user question.
 3. **OLS → predictor.** POST to
-   `http://gemma-4-e4b-predictor.gemma-serving.svc.cluster.local/v1/chat/completions`.
+   `http://granite-41-3b-predictor.gemma-serving.svc.cluster.local:8080/v1/chat/completions`.
    Uses the `openai` provider type from OLSConfig. No external
    network egress — everything is in-cluster DNS.
 4. **vLLM generates tokens.** The predictor pod uses the GPU
-   (provisioned by the driver DaemonSet) to run Gemma 4 inference.
-   Streams tokens back as Server-Sent Events.
+   (provisioned by the driver DaemonSet) to run inference. Streams
+   tokens back as Server-Sent Events.
 5. **OLS relays tokens to the browser.** User sees the answer appear
    in real time in the console.
 
 No request ever leaves the OCP cluster. That's the entire reason
 this architecture exists.
+
+## Why Granite 4.1 and not Gemma 4?
+
+This project originally targeted Google Gemma 4. During development
+we discovered fundamental constraints that make Gemma 4 incompatible
+with 8 GB consumer GPUs via vLLM:
+
+- **Gemma 4 E4B** ("Effective 4B"): MoE architecture with 128
+  experts. Total weight storage ~15 GB even though only a fraction
+  fires per token. OOM'd immediately.
+- **Gemma 4 E2B** ("Effective 2B"): Same MoE architecture. Total
+  weight storage ~9.5 GB. OOM'd in bf16. fp8 quantization failed
+  (Ampere GPUs lack native fp8; the Marlin kernel's repack step
+  exceeds VRAM). CPU offloading failed (known vLLM bug, PR #18298).
+- **RHAIIS preview image** (`registry.redhat.io/rhaii-preview/vllm-cuda-rhel9:gemma4`):
+  Red Hat's Gemma 4 tech-preview vLLM build loaded E2B successfully
+  with CPU offloading, but hit an assertion error during KV cache
+  initialization that hasn't been patched yet.
+
+IBM Granite 4.1 3B is a **dense** transformer — what you see is what
+you get. 6.4 GB of weights loads cleanly in bf16 on 8 GB VRAM with
+room for KV cache. No quantization hacks, no offloading, no MoE
+surprises.
+
+For customers with larger GPUs (16 GB+), Gemma 4 remains a strong
+option and the architecture supports it with minimal changes.
 
 ## What changes at production scale
 
@@ -173,7 +199,7 @@ When moving to a 3-node compact cluster with an L4 or L40S:
 
 | Layer | SNO homelab | Production pilot |
 |---|---|---|
-| `gemma-serving` predictor | Gemma 4 E4B, 8GB VRAM | Gemma 4 26B-A4B, 24GB VRAM |
+| Model | Granite 4.1 3B, 6.4 GB | Granite 4.1 8B/30B, or model of choice |
 | vLLM args | `--enforce-eager`, `max-num-seqs=4` | Full CUDA graphs, `max-num-seqs=16+` |
 | Deployment mode | RawDeployment (no Knative) | Serverless (Knative + Istio) for scale-to-zero |
 | GPU operator | Consumer driver, may need pinning | Enterprise-certified driver branch |
@@ -214,4 +240,5 @@ to it.
 - [KServe InferenceService reference](https://kserve.github.io/website/latest/reference/api/)
 - [vLLM OpenAI-compatible server](https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html)
 - [NVIDIA GPU Operator on OCP](https://docs.nvidia.com/datacenter/cloud-native/openshift/)
-- [Gemma 4 model card](https://huggingface.co/google/gemma-4-e4b-it)
+- [IBM Granite 4.1 blog post](https://research.ibm.com/blog/granite-4-1-ai-foundation-models)
+- [Granite 4.1 on Hugging Face](https://huggingface.co/ibm-granite/granite-4.1-3b)

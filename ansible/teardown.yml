@@ -11,7 +11,7 @@
 # To see what would happen first:
 #   ansible-playbook -i inventory/hosts.ini teardown.yml --check
 
-- name: "Teardown OLS + Gemma 4 deployment"
+- name: "Teardown OLS + self-hosted LLM deployment"
   hosts: local
   gather_facts: false
 
@@ -28,7 +28,7 @@
         prompt: |
           This will remove:
             - OLSConfig and OLS credentials secret
-            - Gemma InferenceService, ServingRuntime, gemma-serving namespace
+            - InferenceService, ServingRuntime, gemma-serving namespace
             - RHOAI DataScienceCluster
             - NVIDIA GPU ClusterPolicy (uninstalls driver from the node)
             - NodeFeatureDiscovery CR
@@ -56,13 +56,13 @@
 
     - name: "Remove InferenceService"
       ansible.builtin.command:
-        cmd: oc delete inferenceservice gemma-4-e4b -n gemma-serving --ignore-not-found
+        cmd: oc delete inferenceservice --all -n gemma-serving --ignore-not-found
       register: out
       changed_when: "'deleted' in out.stdout"
 
     - name: "Remove ServingRuntime"
       ansible.builtin.command:
-        cmd: oc delete servingruntime vllm-gemma4 -n gemma-serving --ignore-not-found
+        cmd: oc delete servingruntime --all -n gemma-serving --ignore-not-found
       register: out
       changed_when: "'deleted' in out.stdout"
 

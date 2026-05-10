@@ -1,7 +1,7 @@
-# Ansible playbook for OLS + Gemma 4 on SNO
+# Ansible playbook for OLS + Self-Hosted LLM on SNO
 
 Automates GPU detection and manifest application for the
-OpenShift Lightspeed + Gemma 4 reference architecture.
+OpenShift Lightspeed + self-hosted LLM reference architecture.
 
 **No SSH required. No Python Kubernetes libraries. Just `oc` and
 `ansible-core`.**
@@ -18,8 +18,8 @@ OpenShift Lightspeed + Gemma 4 reference architecture.
 3. Runs a CUDA vector-add validation pod to prove the GPU is usable
    from a container.
 4. Applies the trimmed RHOAI DataScienceCluster.
-5. Deploys the Gemma 4 InferenceService and smoke-tests it by
-   `oc exec`-ing a curl into the predictor pod.
+5. Deploys the InferenceService and smoke-tests it by `oc exec`-ing
+   a curl into the predictor pod.
 6. Wires up OpenShift Lightspeed via OLSConfig.
 7. Prints a summary with the console URL and next steps.
 
@@ -121,23 +121,12 @@ This is the canonical "run a command on an OCP node" pattern and works
 identically on RHCOS, SNO, and any other OCP node type. No SSH keys,
 no firewall rules, no user account management.
 
-The cost is ~10 seconds of latency per run while the debug pod spins
-up and tears down. For a homelab playbook that's fine; if you were
-detecting GPUs across hundreds of nodes it would be worth replacing
-with NFD's own labels (which is what you'd use in production anyway,
-but which require NFD to already be running — the thing we're
-deciding whether to install).
-
 ## Re-running
 
 The playbook is idempotent — every `oc apply` naturally is, and all
 `oc delete` operations use `--ignore-not-found`. Re-running after a
 partial failure picks up where it left off. Re-running after a
 successful run is a no-op (modulo the smoke test, which always runs).
-
-`changed_when` checks parse `oc apply` output for "configured/created"
-vs "unchanged" so Ansible's summary accurately reflects what actually
-changed.
 
 ## Troubleshooting
 
@@ -150,10 +139,10 @@ the operator to be installed first.
 
 **Driver daemonset wait times out.** On a 3060 Ti (or other consumer
 GPU), the NVIDIA driver build can fail. Check pod logs:
-`oc -n nvidia-gpu-operator logs -l app=nvidia-driver-daemonset`. If
-you see driver version issues, pin `driver.version` in
-`manifests/02-gpu-clusterpolicy.yaml` to a known-good build (e.g. `550.90.07`)
-and re-run with `--tags gpu`.
+`oc -n nvidia-gpu-operator logs -l app.kubernetes.io/component=nvidia-driver`.
+If you see driver version issues, pin `driver.version` in
+`manifests/02-gpu-clusterpolicy.yaml` to a known-good build (e.g.
+`550.90.07`) and re-run with `--tags gpu`.
 
 **KServe wait times out in Phase 2.** The label selector
 `control-plane=kserve-controller-manager` may not match what RHOAI
@@ -169,8 +158,10 @@ Update the selector in `deploy.yml` Phase 2 accordingly.
 cause. Check what vLLM is actually advertising:
 
 ```bash
-oc exec -n gemma-serving <predictor-pod> -- curl -s http://localhost:8080/v1/models
+oc exec -n gemma-serving <predictor-pod> -c kserve-container -- \
+  curl -s http://localhost:8080/v1/models
 ```
 
 The `id` field in that response must match `--served-model-name` in
-`manifests/04-servingruntime.yaml` and `models[].name` in `manifests/07-olsconfig.yaml`.
+`manifests/04-servingruntime.yaml` and `models[].name` in
+`manifests/07-olsconfig.yaml`.
