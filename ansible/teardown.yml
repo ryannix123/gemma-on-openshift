@@ -28,7 +28,7 @@
         prompt: |
           This will remove:
             - OLSConfig and OLS credentials secret
-            - InferenceService, ServingRuntime, gemma-serving namespace
+            - InferenceService, ServingRuntime, llm-serving namespace
             - RHOAI DataScienceCluster
             - NVIDIA GPU ClusterPolicy (uninstalls driver from the node)
             - NodeFeatureDiscovery CR
@@ -56,19 +56,19 @@
 
     - name: "Remove InferenceService"
       ansible.builtin.command:
-        cmd: oc delete inferenceservice --all -n gemma-serving --ignore-not-found
+        cmd: oc delete inferenceservice --all -n llm-serving --ignore-not-found
       register: out
       changed_when: "'deleted' in out.stdout"
 
     - name: "Remove ServingRuntime"
       ansible.builtin.command:
-        cmd: oc delete servingruntime --all -n gemma-serving --ignore-not-found
+        cmd: oc delete servingruntime --all -n llm-serving --ignore-not-found
       register: out
       changed_when: "'deleted' in out.stdout"
 
-    - name: "Remove gemma-serving namespace"
+    - name: "Remove llm-serving namespace"
       ansible.builtin.command:
-        cmd: oc delete namespace gemma-serving --ignore-not-found
+        cmd: oc delete namespace llm-serving --ignore-not-found
       register: out
       changed_when: "'deleted' in out.stdout"
 

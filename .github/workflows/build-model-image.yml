@@ -1,0 +1,144 @@
+# .github/workflows/build-model-image.yml
+#
+# Build and push the OCI ModelCar image to Quay.io.
+#
+# Runs on:
+#   - Manual dispatch (Actions tab → "Run workflow") with a user-supplied tag
+#   - Push to main when Containerfile or build.sh changes
+#
+# Required secrets (Settings → Secrets and variables → Actions):
+#   HF_TOKEN      — Hugging Face access token (read access to model repo)
+#   QUAY_USERNAME — Quay.io robot account name (e.g. ryan_nix+github_actions)
+#   QUAY_TOKEN    — Quay.io robot account password
+#
+# The workflow uses GitHub-hosted runners (ubuntu-latest). Disk space
+# is reclaimed by removing unused pre-installed software (~30 GB freed).
+# This comfortably fits Granite 4.1 3B (~6.4 GB). For larger models
+# (8B, 30B), switch to a self-hosted runner with more disk.
+
+name: Build and push model image
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag (e.g. v1, v2)"
+        required: true
+        default: "v1"
+  push:
+    branches: [main]
+    paths:
+      - "Containerfile"
+      - "build.sh"
+
+env:
+  IMAGE_REPO: quay.io/ryan_nix/granite4-llm
+  MODEL_ID: ibm-granite/granite-4.1-3b
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        # GitHub-hosted runners have ~14 GB free by default. Reclaim
+        # ~30 GB by removing pre-installed software we don't need.
+        run: |
+          echo "=== Before cleanup ==="
+          df -h /
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/graalvm
+          sudo rm -rf /usr/local/lib/node_modules
+          sudo docker system prune -af 2>/dev/null || true
+          echo "=== After cleanup ==="
+          df -h /
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install huggingface_hub
+        run: pip install --upgrade huggingface_hub
+
+      - name: Log in to Hugging Face
+        run: |
+          python3 -c "
+          from huggingface_hub import login
+          login(token='${{ secrets.HF_TOKEN }}', add_to_git_credential=False)
+          "
+
+      - name: Download model weights
+        run: |
+          mkdir -p model
+          python3 -c "
+          from huggingface_hub import snapshot_download
+          path = snapshot_download(
+              repo_id='${MODEL_ID}',
+              local_dir='model',
+              ignore_patterns=['*.gguf', '*.bin', 'original/*'],
+          )
+          print(f'Downloaded to: {path}')
+          "
+
+      - name: Verify model size
+        run: |
+          echo "=== Model directory ==="
+          ls -lh model/
+          SIZE=$(du -sb model/ | awk '{print $1}')
+          echo "Total size: ${SIZE} bytes"
+          MIN=$((3 * 1024 * 1024 * 1024))
+          if [ "${SIZE}" -lt "${MIN}" ]; then
+            echo "ERROR: Model too small (< 3 GB). Download likely failed."
+            exit 1
+          fi
+          echo "✓ Size check passed."
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build OCI image
+        run: |
+          podman build \
+            --platform linux/amd64 \
+            -t "${IMAGE_REPO}:${{ steps.tag.outputs.tag }}" \
+            -f Containerfile \
+            .
+
+      - name: Log in to Quay.io
+        run: |
+          podman login quay.io \
+            -u "${{ secrets.QUAY_USERNAME }}" \
+            -p "${{ secrets.QUAY_TOKEN }}"
+
+      - name: Push image
+        run: |
+          podman push "${IMAGE_REPO}:${{ steps.tag.outputs.tag }}"
+          # Also push as :latest
+          podman tag "${IMAGE_REPO}:${{ steps.tag.outputs.tag }}" "${IMAGE_REPO}:latest"
+          podman push "${IMAGE_REPO}:latest"
+
+      - name: Print summary
+        run: |
+          echo "============================================="
+          echo "✓ Image pushed successfully"
+          echo "  ${IMAGE_REPO}:${{ steps.tag.outputs.tag }}"
+          echo "  ${IMAGE_REPO}:latest"
+          echo ""
+          echo "Update manifests/05-inferenceservice.yaml:"
+          echo "  storageUri: oci://${IMAGE_REPO}:${{ steps.tag.outputs.tag }}"
+          echo "============================================="
