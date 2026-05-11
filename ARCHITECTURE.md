@@ -27,12 +27,12 @@ own them at an enterprise customer:
 └──────────────────────────────────────────────────────────────────┘
                 │
                 │  in-cluster Service DNS:
-                │  granite-41-3b-predictor.gemma-serving.svc:8080
+                │  granite-41-3b-predictor.llm-serving.svc:8080
                 │
                 ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │                                                                  │
-│  gemma-serving  (model workload namespace)                       │
+│  llm-serving  (model workload namespace)                       │
 │  ─────────────                                                   │
 │                                                                  │
 │    ┌─────────────────────────────────────┐                       │
@@ -77,7 +77,7 @@ own them at an enterprise customer:
 
 ## What runs where, and why it matters
 
-### `gemma-serving` — the workload
+### `llm-serving` — the workload
 
 This is the namespace you created. Two things exist here:
 
@@ -92,12 +92,12 @@ This is the namespace you created. Two things exist here:
 
 The namespace boundary matters for three reasons:
 
-1. **RBAC and audit.** Whoever has edit access to `gemma-serving`
+1. **RBAC and audit.** Whoever has edit access to `llm-serving`
    can modify the running model — rollback to a previous OCI image
    tag, change vLLM args, scale replicas. In regulated customers,
    that's a narrower trust boundary than "whoever administers the
    RHOAI platform."
-2. **Cost attribution.** `oc adm top pod -n gemma-serving` shows
+2. **Cost attribution.** `oc adm top pod -n llm-serving` shows
    actual inference cost (GPU memory, CPU, RAM). That's the number
    finance and procurement want, not the RHOAI control plane's
    overhead.
@@ -141,7 +141,7 @@ GPU-capable node and handle:
 
 Again, **nothing your model runs here**. The GPU Operator just makes
 "I need a GPU" a thing the scheduler understands. Your vLLM pod in
-`gemma-serving` then requests one and gets scheduled onto the node
+`llm-serving` then requests one and gets scheduled onto the node
 with the GPU.
 
 ## Data flow for a single query
@@ -154,7 +154,7 @@ When a user types a question into the OLS console in the OCP web UI:
    applies any RAG index, assembles the system prompt plus the
    user question.
 3. **OLS → predictor.** POST to
-   `http://granite-41-3b-predictor.gemma-serving.svc.cluster.local:8080/v1/chat/completions`.
+   `http://granite-41-3b-predictor.llm-serving.svc.cluster.local:8080/v1/chat/completions`.
    Uses the `openai` provider type from OLSConfig. No external
    network egress — everything is in-cluster DNS.
 4. **vLLM generates tokens.** The predictor pod uses the GPU

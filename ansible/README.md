@@ -158,7 +158,7 @@ Update the selector in `deploy.yml` Phase 2 accordingly.
 cause. Check what vLLM is actually advertising:
 
 ```bash
-oc exec -n gemma-serving <predictor-pod> -c kserve-container -- \
+oc exec -n llm-serving <predictor-pod> -c kserve-container -- \
   curl -s http://localhost:8080/v1/models
 ```
 

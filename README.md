@@ -23,13 +23,13 @@ through your account team.
 ## What this builds
 
 Three namespaces cooperating. The **model itself** runs in
-`gemma-serving`. **OpenShift AI** manages it from
+`llm-serving`. **OpenShift AI** manages it from
 `redhat-ods-applications`. The **NVIDIA driver** provides the GPU
 from `nvidia-gpu-operator`. And **OpenShift Lightspeed** calls the
 model over in-cluster DNS from `openshift-lightspeed`.
 
 ```
-openshift-lightspeed              gemma-serving
+openshift-lightspeed              llm-serving
 ────────────────────              ─────────────
 lightspeed-app-server  ────HTTP──►  granite-41-3b-predictor (vLLM + Granite 4.1)
                                          │
@@ -162,17 +162,17 @@ oc apply -f manifests/00-namespace.yaml
 oc apply -f manifests/04-servingruntime.yaml
 oc apply -f manifests/05-inferenceservice.yaml
 # Watch the predictor pod come up:
-oc -n gemma-serving get pods -w
+oc -n llm-serving get pods -w
 # First start is slow: KServe pulls the OCI image (~6.4 GB), copies
 # model files, vLLM loads the model. Expect 5-10 min.
 
 # SMOKE TEST the model directly before touching OLS:
-POD=$(oc get pod -n gemma-serving -o jsonpath='{.items[0].metadata.name}')
-oc exec -n gemma-serving "$POD" -c kserve-container -- \
+POD=$(oc get pod -n llm-serving -o jsonpath='{.items[0].metadata.name}')
+oc exec -n llm-serving "$POD" -c kserve-container -- \
   curl -s http://localhost:8080/v1/models | python3 -m json.tool
 # Should return a model with id "granite-41-3b"
 
-oc exec -n gemma-serving "$POD" -c kserve-container -- \
+oc exec -n llm-serving "$POD" -c kserve-container -- \
   curl -s -X POST http://localhost:8080/v1/chat/completions \
   -H 'Content-Type: application/json' \
   -d '{
@@ -242,7 +242,7 @@ and teardown instructions.
 2. Ask: "How do I create a PersistentVolumeClaim with the LVM storage
    class?"
 3. In a side terminal:
-   `oc -n gemma-serving logs -f deployment/granite-41-3b-predictor`
+   `oc -n llm-serving logs -f deployment/granite-41-3b-predictor`
    You'll see the request hit and tokens stream back.
 
 ## Swapping models
@@ -278,9 +278,9 @@ Models tested or considered during development:
 | vLLM CrashLoop with CUDA OOM | Model too large for GPU | Lower `--max-model-len` and `--gpu-memory-utilization`, or use a smaller model |
 | vLLM CrashLoop with KV cache error | `max-model-len` exceeds available KV cache | Reduce `--max-model-len` or increase `--gpu-memory-utilization` |
 | OLS "prompt exceeds maximum token limit" | Context window too small for OLS system prompt | Increase `--max-model-len` to 8192+ |
-| OLS "Connection error" to predictor | Port mismatch or service name wrong | Verify OLSConfig URL includes `:8080` and matches `oc get svc -n gemma-serving` |
-| OLS pod can't reach predictor | Wrong service name/URL | Verify with `oc -n gemma-serving get svc`; the service is `<isvc-name>-predictor` in RawDeployment mode |
-| Old ReplicaSet deadlocks new deployment | Rolling update can't schedule (GPU contention) | `oc scale replicaset -n gemma-serving <old-rs> --replicas=0` then delete old pod |
+| OLS "Connection error" to predictor | Port mismatch or service name wrong | Verify OLSConfig URL includes `:8080` and matches `oc get svc -n llm-serving` |
+| OLS pod can't reach predictor | Wrong service name/URL | Verify with `oc -n llm-serving get svc`; the service is `<isvc-name>-predictor` in RawDeployment mode |
+| Old ReplicaSet deadlocks new deployment | Rolling update can't schedule (GPU contention) | `oc scale replicaset -n llm-serving <old-rs> --replicas=0` then delete old pod |
 
 ## Scaling up: from SNO/3060 Ti to L4/L40S pilot
 
@@ -307,7 +307,7 @@ change at all.
 ```
 .
 ├── manifests/
-│   ├── 00-namespace.yaml ........ gemma-serving namespace
+│   ├── 00-namespace.yaml ........ llm-serving namespace
 │   ├── 01-nfd.yaml .............. NodeFeatureDiscovery instance
 │   ├── 02-gpu-clusterpolicy.yaml  NVIDIA GPU Operator config
 │   ├── 03-dsc.yaml .............. RHOAI DataScienceCluster (trimmed for SNO)
