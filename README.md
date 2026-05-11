@@ -6,7 +6,7 @@
 
 A reference architecture for running Red Hat OpenShift
 Lightspeed against a self-hosted LLM on Red Hat OpenShift AI, with no
-external LLM provider. Built around an SNO cluster with a consumer
+external LLM provider. Built and tested against a SNO cluster with a consumer
 NVIDIA GPU (RTX 3060 Ti / 8 GB VRAM).
 
 The default model is **IBM Granite 4.1 3B** — a dense, instruction-tuned
