@@ -1,0 +1,314 @@
+---
+# test-questions.yml — Synthetic questions for validating OLS + Granite 4.1.
+#
+# Each question has:
+#   - question: The prompt sent to OLS
+#   - category: Grouping for the report (create, troubleshoot, configure, explain)
+#   - difficulty: easy, medium, hard
+#   - expected_keywords: Terms the answer MUST contain (at least N of them)
+#   - min_keyword_hits: Minimum number of expected_keywords that must appear
+#   - anti_keywords: Terms that indicate hallucination or wrong answers
+#   - min_response_length: Minimum character count (too short = "I don't know")
+#   - max_response_length: Maximum character count (too long = rambling)
+
+questions:
+
+  # ──────────────────────────────────────────────────────────────
+  # CATEGORY: Resource Creation
+  # ──────────────────────────────────────────────────────────────
+
+  - question: "How do I create a PersistentVolumeClaim in OpenShift?"
+    category: create
+    difficulty: easy
+    expected_keywords:
+      - PersistentVolumeClaim
+      - storage
+      - accessModes
+      - resources
+      - requests
+      - storageClassName
+    min_keyword_hits: 3
+    anti_keywords: []
+    min_response_length: 100
+    max_response_length: 5000
+
+  - question: "How do I create a Deployment with 3 replicas running nginx?"
+    category: create
+    difficulty: easy
+    expected_keywords:
+      - Deployment
+      - replicas
+      - nginx
+      - container
+      - spec
+      - template
+    min_keyword_hits: 3
+    anti_keywords: []
+    min_response_length: 100
+    max_response_length: 5000
+
+  - question: "How do I expose a service externally using a Route?"
+    category: create
+    difficulty: easy
+    expected_keywords:
+      - Route
+      - service
+      - host
+      - oc expose
+      - spec
+    min_keyword_hits: 2
+    anti_keywords: []
+    min_response_length: 80
+    max_response_length: 5000
+
+  - question: "How do I create a ConfigMap from a file?"
+    category: create
+    difficulty: easy
+    expected_keywords:
+      - ConfigMap
+      - oc create configmap
+      - from-file
+    min_keyword_hits: 2
+    anti_keywords: []
+    min_response_length: 60
+    max_response_length: 4000
+
+  - question: "How do I create a CronJob that runs a cleanup script every night at midnight?"
+    category: create
+    difficulty: medium
+    expected_keywords:
+      - CronJob
+      - schedule
+      - "0 0"
+      - spec
+      - jobTemplate
+      - container
+    min_keyword_hits: 3
+    anti_keywords: []
+    min_response_length: 100
+    max_response_length: 5000
+
+  # ──────────────────────────────────────────────────────────────
+  # CATEGORY: Troubleshooting
+  # ──────────────────────────────────────────────────────────────
+
+  - question: "My pod is stuck in CrashLoopBackOff. How do I troubleshoot it?"
+    category: troubleshoot
+    difficulty: easy
+    expected_keywords:
+      - logs
+      - oc logs
+      - describe
+      - CrashLoopBackOff
+      - restart
+      - events
+    min_keyword_hits: 3
+    anti_keywords: []
+    min_response_length: 100
+    max_response_length: 5000
+
+  - question: "A pod is stuck in Pending state. What should I check?"
+    category: troubleshoot
+    difficulty: medium
+    expected_keywords:
+      - Pending
+      - resources
+      - describe
+      - events
+      - scheduling
+      - node
+    min_keyword_hits: 3
+    anti_keywords: []
+    min_response_length: 100
+    max_response_length: 5000
+
+  - question: "I'm getting ImagePullBackOff on my deployment. How do I fix it?"
+    category: troubleshoot
+    difficulty: easy
+    expected_keywords:
+      - ImagePullBackOff
+      - image
+      - pull
+      - secret
+      - registry
+    min_keyword_hits: 3
+    anti_keywords: []
+    min_response_length: 80
+    max_response_length: 5000
+
+  - question: "How do I check why a node is in NotReady status?"
+    category: troubleshoot
+    difficulty: medium
+    expected_keywords:
+      - NotReady
+      - describe
+      - node
+      - conditions
+      - kubelet
+    min_keyword_hits: 3
+    anti_keywords: []
+    min_response_length: 100
+    max_response_length: 5000
+
+  - question: "My application cannot connect to a service in another namespace. What could be wrong?"
+    category: troubleshoot
+    difficulty: hard
+    expected_keywords:
+      - NetworkPolicy
+      - DNS
+      - service
+      - namespace
+    min_keyword_hits: 2
+    anti_keywords: []
+    min_response_length: 80
+    max_response_length: 5000
+
+  # ──────────────────────────────────────────────────────────────
+  # CATEGORY: Configuration and Security
+  # ──────────────────────────────────────────────────────────────
+
+  - question: "How do I create a NetworkPolicy that only allows traffic from pods with a specific label?"
+    category: configure
+    difficulty: medium
+    expected_keywords:
+      - NetworkPolicy
+      - podSelector
+      - matchLabels
+      - ingress
+      - spec
+    min_keyword_hits: 3
+    anti_keywords: []
+    min_response_length: 100
+    max_response_length: 5000
+
+  - question: "How do I give a service account permission to view pods in a specific namespace?"
+    category: configure
+    difficulty: medium
+    expected_keywords:
+      - RoleBinding
+      - Role
+      - ServiceAccount
+      - pods
+      - get
+      - list
+    min_keyword_hits: 3
+    anti_keywords: []
+    min_response_length: 100
+    max_response_length: 5000
+
+  - question: "How do I configure a pod to run with a specific Security Context Constraint?"
+    category: configure
+    difficulty: hard
+    expected_keywords:
+      - SecurityContextConstraints
+      - SCC
+      - serviceAccount
+      - oc adm policy
+    min_keyword_hits: 2
+    anti_keywords: []
+    min_response_length: 80
+    max_response_length: 5000
+
+  - question: "How do I set resource limits and requests on a container?"
+    category: configure
+    difficulty: easy
+    expected_keywords:
+      - resources
+      - limits
+      - requests
+      - cpu
+      - memory
+    min_keyword_hits: 3
+    anti_keywords: []
+    min_response_length: 80
+    max_response_length: 5000
+
+  - question: "How do I configure horizontal pod autoscaling based on CPU usage?"
+    category: configure
+    difficulty: medium
+    expected_keywords:
+      - HorizontalPodAutoscaler
+      - CPU
+      - target
+      - minReplicas
+      - maxReplicas
+    min_keyword_hits: 3
+    anti_keywords: []
+    min_response_length: 100
+    max_response_length: 5000
+
+  # ──────────────────────────────────────────────────────────────
+  # CATEGORY: Concepts and Explanations
+  # ──────────────────────────────────────────────────────────────
+
+  - question: "What is the difference between a Deployment and a StatefulSet?"
+    category: explain
+    difficulty: medium
+    expected_keywords:
+      - Deployment
+      - StatefulSet
+      - stateless
+      - stateful
+      - persistent
+      - identity
+      - ordered
+    min_keyword_hits: 3
+    anti_keywords: []
+    min_response_length: 100
+    max_response_length: 5000
+
+  - question: "What is a DaemonSet and when should I use one?"
+    category: explain
+    difficulty: easy
+    expected_keywords:
+      - DaemonSet
+      - node
+      - every
+      - monitoring
+      - logging
+    min_keyword_hits: 3
+    anti_keywords: []
+    min_response_length: 80
+    max_response_length: 5000
+
+  - question: "Explain the difference between ClusterIP, NodePort, and LoadBalancer service types."
+    category: explain
+    difficulty: medium
+    expected_keywords:
+      - ClusterIP
+      - NodePort
+      - LoadBalancer
+      - internal
+      - external
+    min_keyword_hits: 4
+    anti_keywords: []
+    min_response_length: 100
+    max_response_length: 5000
+
+  - question: "What are OpenShift SecurityContextConstraints and how do they differ from Kubernetes PodSecurityPolicies?"
+    category: explain
+    difficulty: hard
+    expected_keywords:
+      - SecurityContextConstraints
+      - SCC
+      - OpenShift
+      - security
+      - privilege
+    min_keyword_hits: 3
+    anti_keywords: []
+    min_response_length: 100
+    max_response_length: 5000
+
+  - question: "What is the purpose of an Operator in OpenShift?"
+    category: explain
+    difficulty: easy
+    expected_keywords:
+      - Operator
+      - custom resource
+      - manage
+      - lifecycle
+      - automate
+    min_keyword_hits: 2
+    anti_keywords: []
+    min_response_length: 80
+    max_response_length: 5000

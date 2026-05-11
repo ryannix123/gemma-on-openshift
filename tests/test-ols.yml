@@ -1,0 +1,250 @@
+---
+# test-ols.yml — Validate OLS + Granite 4.1 by running synthetic questions
+# and scoring the responses.
+#
+# This playbook:
+#   1. Authenticates to the OLS API using the current oc login token
+#   2. Sends each question from test-questions.yml to OLS
+#   3. Scores each response on keyword presence, length, and anti-keywords
+#   4. Generates a summary report with pass/fail per question and overall score
+#
+# Usage:
+#   ansible-playbook -i inventory/hosts.ini tests/test-ols.yml
+#
+# Prerequisites:
+#   - oc logged in as a user with lightspeed access
+#   - OLS is running and healthy (lightspeed-app-server 2/2)
+#   - The model predictor is Running 2/2 in llm-serving namespace
+#
+# Output:
+#   - Console summary with pass/fail per question
+#   - Detailed JSON report at /tmp/ols-test-report.json
+
+- name: "Validate OLS with synthetic questions"
+  hosts: local
+  gather_facts: false
+
+  vars:
+    questions_file: "{{ playbook_dir }}/test-questions.yml"
+    report_file: "/tmp/ols-test-report.json"
+    ols_namespace: "openshift-lightspeed"
+    # Timeout per question in seconds. Granite 4.1 3B on a 3060 Ti
+    # responds in 5-30 seconds depending on answer length.
+    query_timeout: 60
+
+  tasks:
+
+    # ------------------------------------------------------------------
+    # Preflight
+    # ------------------------------------------------------------------
+
+    - name: "Preflight | Verify oc is logged in"
+      ansible.builtin.command:
+        cmd: oc whoami
+      register: oc_user
+      changed_when: false
+      failed_when: oc_user.rc != 0
+
+    - name: "Preflight | Get bearer token"
+      ansible.builtin.command:
+        cmd: oc whoami -t
+      register: oc_token
+      changed_when: false
+      failed_when: oc_token.rc != 0
+
+    - name: "Preflight | Get OLS API route"
+      ansible.builtin.shell:
+        cmd: >
+          oc get route -n {{ ols_namespace }}
+          -l app.kubernetes.io/component=lightspeed-service-api
+          -o jsonpath='{.items[0].spec.host}' 2>/dev/null ||
+          echo ""
+      register: ols_route
+      changed_when: false
+
+    - name: "Preflight | Fall back to port-forward if no route"
+      ansible.builtin.set_fact:
+        ols_base_url: "{{ 'https://' + ols_route.stdout if ols_route.stdout | length > 0 else '' }}"
+
+    - name: "Preflight | If no route, use direct service URL via oc exec"
+      ansible.builtin.set_fact:
+        use_exec_method: "{{ ols_base_url | length == 0 }}"
+
+    - name: "Preflight | Verify OLS app server is Ready"
+      ansible.builtin.command:
+        cmd: >
+          oc get pod -n {{ ols_namespace }}
+          -l app.kubernetes.io/component=lightspeed-service-api
+          -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}'
+      register: ols_ready
+      changed_when: false
+      failed_when: ols_ready.stdout != "True"
+
+    - name: "Preflight | Get OLS pod name for exec method"
+      ansible.builtin.command:
+        cmd: >
+          oc get pod -n {{ ols_namespace }}
+          -l app.kubernetes.io/component=lightspeed-service-api
+          -o jsonpath='{.items[0].metadata.name}'
+      register: ols_pod
+      changed_when: false
+      when: use_exec_method
+
+    - name: "Preflight | Load test questions"
+      ansible.builtin.include_vars:
+        file: "{{ questions_file }}"
+        name: test_data
+
+    - name: "Preflight | Display test configuration"
+      ansible.builtin.debug:
+        msg:
+          - "User:       {{ oc_user.stdout }}"
+          - "OLS URL:    {{ ols_base_url | default('(via oc exec into OLS pod)') }}"
+          - "Questions:  {{ test_data.questions | length }}"
+          - "Timeout:    {{ query_timeout }}s per question"
+
+    # ------------------------------------------------------------------
+    # Run questions
+    # ------------------------------------------------------------------
+
+    - name: "Test | Send questions to OLS and collect responses"
+      ansible.builtin.shell:
+        cmd: |
+          {% if use_exec_method %}
+          oc exec -n {{ ols_namespace }} {{ ols_pod.stdout }} -c lightspeed-service-api -- \
+            curl -sS -m {{ query_timeout }} -k \
+            -X POST https://localhost:8443/v1/query \
+            -H 'Content-Type: application/json' \
+            -H 'Authorization: Bearer {{ oc_token.stdout }}' \
+            -d '{"query": "{{ item.question | regex_replace("'", "'\\''") }}", "conversation_id": ""}'
+          {% else %}
+          curl -sS -m {{ query_timeout }} -k \
+            -X POST {{ ols_base_url }}/v1/query \
+            -H 'Content-Type: application/json' \
+            -H 'Authorization: Bearer {{ oc_token.stdout }}' \
+            -d '{"query": "{{ item.question | regex_replace("'", "'\\''") }}", "conversation_id": ""}'
+          {% endif %}
+      register: ols_responses
+      changed_when: false
+      failed_when: false
+      loop: "{{ test_data.questions }}"
+      loop_control:
+        label: "[{{ item.category }}] {{ item.question | truncate(60) }}"
+
+    # ------------------------------------------------------------------
+    # Score responses
+    # ------------------------------------------------------------------
+
+    - name: "Score | Evaluate each response"
+      ansible.builtin.set_fact:
+        test_results: "{{ test_results | default([]) + [result] }}"
+      vars:
+        response_body: "{{ (item.stdout | from_json).response | default('') }}"
+        response_length: "{{ response_body | length }}"
+        # Count keyword hits (case-insensitive)
+        keyword_hits: >-
+          {{ test_data.questions[idx].expected_keywords |
+             select('search', '(?i)' + response_body) |
+             list | length }}
+        # Actually, Ansible's select+search tests the keyword against the response.
+        # We need the reverse: test if each keyword appears in the response.
+        actual_keyword_hits: >-
+          {% set hits = [] %}
+          {% for kw in test_data.questions[idx].expected_keywords %}
+          {%   if kw | lower in response_body | lower %}
+          {%     set _ = hits.append(kw) %}
+          {%   endif %}
+          {% endfor %}
+          {{ hits }}
+        anti_keyword_hits: >-
+          {% set hits = [] %}
+          {% for kw in test_data.questions[idx].anti_keywords %}
+          {%   if kw | lower in response_body | lower %}
+          {%     set _ = hits.append(kw) %}
+          {%   endif %}
+          {% endfor %}
+          {{ hits }}
+        kw_hit_count: "{{ actual_keyword_hits | from_yaml | length }}"
+        anti_hit_count: "{{ anti_keyword_hits | from_yaml | length }}"
+        pass_keywords: "{{ (kw_hit_count | int) >= (test_data.questions[idx].min_keyword_hits | int) }}"
+        pass_length: "{{ (response_length | int) >= (test_data.questions[idx].min_response_length | int) and (response_length | int) <= (test_data.questions[idx].max_response_length | int) }}"
+        pass_anti: "{{ (anti_hit_count | int) == 0 }}"
+        pass_no_error: "{{ item.rc == 0 and 'error' not in (item.stdout | lower)[:50] }}"
+        overall_pass: "{{ pass_keywords and pass_length and pass_anti and pass_no_error }}"
+        result:
+          question: "{{ test_data.questions[idx].question }}"
+          category: "{{ test_data.questions[idx].category }}"
+          difficulty: "{{ test_data.questions[idx].difficulty }}"
+          passed: "{{ overall_pass }}"
+          response_length: "{{ response_length }}"
+          keyword_hits: "{{ kw_hit_count }}"
+          keyword_target: "{{ test_data.questions[idx].min_keyword_hits }}"
+          keywords_found: "{{ actual_keyword_hits | from_yaml }}"
+          anti_keywords_found: "{{ anti_keyword_hits | from_yaml }}"
+          error: "{{ item.stderr | default('') if item.rc != 0 else '' }}"
+          response_preview: "{{ response_body | truncate(200) }}"
+      loop: "{{ ols_responses.results }}"
+      loop_control:
+        index_var: idx
+        label: "Scoring Q{{ idx + 1 }}"
+
+    # ------------------------------------------------------------------
+    # Report
+    # ------------------------------------------------------------------
+
+    - name: "Report | Calculate summary statistics"
+      ansible.builtin.set_fact:
+        total_questions: "{{ test_results | length }}"
+        total_passed: "{{ test_results | selectattr('passed', 'equalto', true) | list | length }}"
+        by_category: >-
+          {% set cats = {} %}
+          {% for r in test_results %}
+          {%   set cat = r.category %}
+          {%   if cat not in cats %}
+          {%     set _ = cats.update({cat: {'total': 0, 'passed': 0}}) %}
+          {%   endif %}
+          {%   set _ = cats[cat].update({'total': cats[cat].total + 1}) %}
+          {%   if r.passed %}
+          {%     set _ = cats[cat].update({'passed': cats[cat].passed + 1}) %}
+          {%   endif %}
+          {% endfor %}
+          {{ cats }}
+
+    - name: "Report | Display per-question results"
+      ansible.builtin.debug:
+        msg: >-
+          {{ '✓' if item.passed else '✗' }}
+          [{{ item.category }}/{{ item.difficulty }}]
+          {{ item.question | truncate(55) }}
+          (keywords: {{ item.keyword_hits }}/{{ item.keyword_target }},
+          length: {{ item.response_length }} chars)
+      loop: "{{ test_results }}"
+      loop_control:
+        label: "Q{{ ansible_loop.index }}"
+
+    - name: "Report | Display summary"
+      ansible.builtin.debug:
+        msg:
+          - "════════════════════════════════════════════════════════════"
+          - "OLS Validation Report — {{ '%s/%s passed (%s%%)' | format(total_passed, total_questions, ((total_passed | int / total_questions | int) * 100) | round(0) | int) }}"
+          - "════════════════════════════════════════════════════════════"
+          - "Model:    Granite 4.1 3B (self-hosted via vLLM on SNO)"
+          - "User:     {{ oc_user.stdout }}"
+          - "Date:     {{ lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ') }}"
+          - ""
+          - "Per-category breakdown:"
+          - "  Create:        {{ by_category | from_yaml | json_query('create.passed') | default(0) }}/{{ by_category | from_yaml | json_query('create.total') | default(0) }}"
+          - "  Troubleshoot:  {{ by_category | from_yaml | json_query('troubleshoot.passed') | default(0) }}/{{ by_category | from_yaml | json_query('troubleshoot.total') | default(0) }}"
+          - "  Configure:     {{ by_category | from_yaml | json_query('configure.passed') | default(0) }}/{{ by_category | from_yaml | json_query('configure.total') | default(0) }}"
+          - "  Explain:       {{ by_category | from_yaml | json_query('explain.passed') | default(0) }}/{{ by_category | from_yaml | json_query('explain.total') | default(0) }}"
+          - "════════════════════════════════════════════════════════════"
+
+    - name: "Report | Write detailed JSON report"
+      ansible.builtin.copy:
+        content: "{{ {'summary': {'total': total_questions | int, 'passed': total_passed | int, 'score_pct': ((total_passed | int / total_questions | int) * 100) | round(1), 'model': 'granite-4.1-3b', 'timestamp': lookup('pipe', 'date -u +%Y-%m-%dT%H:%M:%SZ')}, 'results': test_results} | to_nice_json }}"
+        dest: "{{ report_file }}"
+      changed_when: true
+
+    - name: "Report | JSON report location"
+      ansible.builtin.debug:
+        msg: "Detailed report written to {{ report_file }}"
