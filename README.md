@@ -2,9 +2,9 @@
   <img src="images/logo.jpg" alt="Self-Hosted LLM on OpenShift" width="500">
 </p>
 
-# OpenShift Lightspeed with a Self-Hosted LLM on Single Node OpenShift
+# OpenShift Lightspeed with a Self-Hosted LLM on OpenShift
 
-A homelab-scale reference architecture for running Red Hat OpenShift
+A reference architecture for running Red Hat OpenShift
 Lightspeed against a self-hosted LLM on Red Hat OpenShift AI, with no
 external LLM provider. Built around an SNO cluster with a consumer
 NVIDIA GPU (RTX 3060 Ti / 8 GB VRAM).
@@ -50,7 +50,7 @@ see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Why Granite 4.1?
 
-This project started with Google Gemma 4. During development, we
+This project started with Google Gemma 4. During development, I
 discovered that **all Gemma 4 variants use a Mixture-of-Experts (MoE)
 architecture** that stores all 128 expert parameter sets in VRAM —
 even the "Effective 2B" variant consumes ~9.5 GB. On an 8 GB consumer
@@ -71,7 +71,7 @@ change.
 
 ## Hardware target
 
-- Single Node OpenShift 4.16+
+- Single Node OpenShift 4.18+
 - 12th Gen Intel i9 (or equivalent), 64 GB+ RAM recommended
 - NVIDIA RTX 3060 Ti (or any NVIDIA card with 8 GB+ VRAM)
 - ~20 GB free on default storage class for model image pull
