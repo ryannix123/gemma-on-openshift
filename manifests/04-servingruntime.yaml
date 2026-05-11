@@ -46,7 +46,7 @@ apiVersion: serving.kserve.io/v1alpha1
 kind: ServingRuntime
 metadata:
   name: vllm-gemma4
-  namespace: gemma-serving
+  namespace: llm-serving
   labels:
     opendatahub.io/dashboard: "true"
   annotations:

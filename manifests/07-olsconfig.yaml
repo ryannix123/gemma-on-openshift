@@ -10,7 +10,7 @@
 # ServingRuntime args, so that's what we reference here.
 #
 # Verify after applying with:
-#   oc -n gemma-serving port-forward svc/granite-41-3b-predictor 8080:80
+#   oc -n llm-serving port-forward svc/granite-41-3b-predictor 8080:80
 #   curl -s http://localhost:8080/v1/models | jq
 # The "id" field in the response is what must match models[].name below.
 #
@@ -29,7 +29,7 @@ spec:
     providers:
       - name: gemma-rhoai
         type: openai
-        url: 'http://granite-41-3b-predictor.gemma-serving.svc.cluster.local:8080/v1'
+        url: 'http://granite-41-3b-predictor.llm-serving.svc.cluster.local:8080/v1'
         credentialsSecretRef:
           name: gemma-creds
         models:
