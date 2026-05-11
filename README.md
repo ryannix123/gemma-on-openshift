@@ -69,14 +69,14 @@ architecture supports Granite 4.1 8B, 30B, or any model the customer
 prefers — only the OCI model image and one `--served-model-name` arg
 change.
 
-## Hardware target
+## Tested hardware example
 
-- Single Node OpenShift 4.18+
+- Single Node OpenShift 4.21.x
 - 12th Gen Intel i9 (or equivalent), 64 GB+ RAM recommended
 - NVIDIA RTX 3060 Ti (or any NVIDIA card with 8 GB+ VRAM)
 - ~20 GB free on default storage class for model image pull
 
-For a customer pilot, the target is a 3-node compact cluster with an
+For a customer pilot, I recommend at least a single or a 3-node compact cluster with an
 L4 or L40S GPU worker. The YAML in this bundle changes minimally
 between the two — see "Scaling up" at the bottom.
 
