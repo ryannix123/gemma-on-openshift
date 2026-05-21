@@ -1,0 +1,55 @@
+# =============================================================================
+# Granite 4.1 3B on OpenShift — Project Hummingbird Variant
+# File: hummingbird/Containerfile
+# Maintainer: Ryan Nix <ryan.nix@gmail.com>
+#
+# Build context: repo root (.)
+# Build command: podman build --platform linux/amd64 \
+#                  -f hummingbird/Containerfile \
+#                  -t quay.io/ryan_nix/granite4-llm:hummingbird-latest .
+#
+# Why Hummingbird?
+#   Near-zero CVE base image · Signed SBOMs · Reproducible builds via Konflux
+#   Freely available like UBI · Red Hat/OpenShift SLA supported
+#   registry.access.redhat.com/hi/  —  https://hummingbird-project.io
+#
+# This is a pure storage image — no process ever runs in this container.
+# KServe's ModelCar sidecar mounts /models/ into the vLLM serving
+# container at deploy time. The base image is used solely for its
+# near-zero CVE filesystem and signed SBOM.
+#
+# See ../Containerfile for the UBI 9 variant.
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Hummingbird distroless runtime
+#
+# Using hi/curl as the smallest general-purpose Hummingbird image.
+# No shell, no package manager. Minimal attack surface.
+# Swap to any hi/* image if a smaller option becomes available.
+# ---------------------------------------------------------------------------
+FROM registry.access.redhat.com/hi/curl:latest
+
+LABEL name="granite4-llm-hummingbird" \
+      maintainer="Ryan Nix <ryan.nix@gmail.com>" \
+      summary="Granite 4.1 3B model weights — Project Hummingbird distroless (near-zero CVE)" \
+      description="IBM Granite 4.1 3B Instruct for KServe ModelCar on Red Hat Hardened Images" \
+      io.k8s.display-name="Granite 4.1 3B (Hummingbird)" \
+      io.openshift.tags="ai,llm,granite,model,hummingbird,distroless" \
+      org.opencontainers.image.title="Granite 4.1 3B for OpenShift Lightspeed (Hummingbird)" \
+      org.opencontainers.image.description="IBM Granite 4.1 3B Instruct, packaged for KServe ModelCar storage on Red Hat Hardened Images" \
+      org.opencontainers.image.authors="Ryan Nix <ryan.nix@gmail.com>" \
+      org.opencontainers.image.source="https://github.com/ryannix123/granite4-on-openshift" \
+      org.opencontainers.image.licenses="Apache-2.0"
+
+USER 0
+
+# Array form mandatory — no shell in distroless runtime
+RUN ["mkdir", "-p", "/models"]
+
+COPY --chown=0:0 model/ /models/
+
+# OpenShift runs as arbitrary UID in GID 0
+RUN ["chmod", "-R", "g+rX", "/models"]
+
+USER ${CONTAINER_DEFAULT_USER}
