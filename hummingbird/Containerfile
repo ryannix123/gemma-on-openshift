@@ -18,16 +18,12 @@
 # container at deploy time. The base image is used solely for its
 # near-zero CVE filesystem and signed SBOM.
 #
-# See ../Containerfile for the UBI 9 variant.
+# NOTE: Hummingbird images are truly distroless — no shell, no mkdir,
+# no chmod, no coreutils. COPY creates the target directory implicitly.
+#
+# See ../Containerfile for the UBI 10 variant.
 # =============================================================================
 
-# ---------------------------------------------------------------------------
-# Hummingbird distroless runtime
-#
-# Using hi/curl as the smallest general-purpose Hummingbird image.
-# No shell, no package manager. Minimal attack surface.
-# Swap to any hi/* image if a smaller option becomes available.
-# ---------------------------------------------------------------------------
 FROM registry.access.redhat.com/hi/curl:latest
 
 LABEL name="granite4-llm-hummingbird" \
@@ -42,14 +38,6 @@ LABEL name="granite4-llm-hummingbird" \
       org.opencontainers.image.source="https://github.com/ryannix123/granite4-on-openshift" \
       org.opencontainers.image.licenses="Apache-2.0"
 
-USER 0
-
-# Array form mandatory — no shell in distroless runtime
-RUN ["mkdir", "-p", "/models"]
-
-COPY --chown=0:0 model/ /models/
-
-# OpenShift runs as arbitrary UID in GID 0
-RUN ["chmod", "-R", "g+rX", "/models"]
+COPY model/ /models/
 
 USER ${CONTAINER_DEFAULT_USER}
