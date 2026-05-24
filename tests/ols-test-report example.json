@@ -1,0 +1,373 @@
+{
+    "results": [
+        {
+            "anti_keywords_found": [],
+            "category": "create",
+            "difficulty": "easy",
+            "error": "",
+            "keyword_hits": 5,
+            "keyword_target": 3,
+            "keywords_found": [
+                "PersistentVolumeClaim",
+                "storage",
+                "accessModes",
+                "resources",
+                "requests"
+            ],
+            "passed": true,
+            "question": "How do I create a PersistentVolumeClaim in OpenShift?",
+            "response_length": 1346,
+            "response_preview": "To create a PersistentVolumeClaim (PVC) in OpenShift, follow these steps:\n\n1. **Define the PVC**: Create a YAML file (e.g., `pvc.yaml`) with the necessary specifications. The key fields include:\n ..."
+        },
+        {
+            "anti_keywords_found": [],
+            "category": "create",
+            "difficulty": "easy",
+            "error": "",
+            "keyword_hits": 6,
+            "keyword_target": 3,
+            "keywords_found": [
+                "Deployment",
+                "replicas",
+                "nginx",
+                "container",
+                "spec",
+                "template"
+            ],
+            "passed": true,
+            "question": "How do I create a Deployment with 3 replicas running nginx?",
+            "response_length": 742,
+            "response_preview": "To create a Deployment with 3 replicas running nginx, follow these steps:\n\n1. **Create a YAML file** (e.g., `nginx-deployment.yaml`) with the following content:\n\n```yaml\napiVersion: apps/v1\nkind:..."
+        },
+        {
+            "anti_keywords_found": [],
+            "category": "create",
+            "difficulty": "easy",
+            "error": "",
+            "keyword_hits": 4,
+            "keyword_target": 2,
+            "keywords_found": [
+                "Route",
+                "service",
+                "host",
+                "oc expose"
+            ],
+            "passed": true,
+            "question": "How do I expose a service externally using a Route?",
+            "response_length": 1243,
+            "response_preview": "To expose a service externally using a Route in Red Hat OpenShift Container Platform, follow these steps:\n\n1. **Log into the correct project** where the service you want to expose is located:\n  ..."
+        },
+        {
+            "anti_keywords_found": [],
+            "category": "create",
+            "difficulty": "easy",
+            "error": "",
+            "keyword_hits": 3,
+            "keyword_target": 2,
+            "keywords_found": [
+                "ConfigMap",
+                "oc create configmap",
+                "from-file"
+            ],
+            "passed": true,
+            "question": "How do I create a ConfigMap from a file?",
+            "response_length": 1308,
+            "response_preview": "To create a ConfigMap from a file, you can use the `oc create configmap` command with the `--from-file` flag. This flag allows you to specify the file(s) you want to import into the ConfigMap...."
+        },
+        {
+            "anti_keywords_found": [],
+            "category": "create",
+            "difficulty": "medium",
+            "error": "",
+            "keyword_hits": 6,
+            "keyword_target": 3,
+            "keywords_found": [
+                "CronJob",
+                "schedule",
+                "0 0",
+                "spec",
+                "jobTemplate",
+                "container"
+            ],
+            "passed": true,
+            "question": "How do I create a CronJob that runs a cleanup script every night at midnight?",
+            "response_length": 1655,
+            "response_preview": "To create a CronJob that runs a cleanup script every night at midnight, you can follow these steps:\n\n1. **Prepare the Cleanup Script**: Ensure your cleanup script is executable and accessible. For..."
+        },
+        {
+            "anti_keywords_found": [],
+            "category": "troubleshoot",
+            "difficulty": "easy",
+            "error": "",
+            "keyword_hits": 6,
+            "keyword_target": 3,
+            "keywords_found": [
+                "logs",
+                "oc logs",
+                "describe",
+                "CrashLoopBackOff",
+                "restart",
+                "events"
+            ],
+            "passed": true,
+            "question": "My pod is stuck in CrashLoopBackOff. How do I troubleshoot it?",
+            "response_length": 4547,
+            "response_preview": "To troubleshoot a pod that is stuck in **CrashLoopBackOff**, follow these systematic steps:\n\n### 1. Verify the Pod\u2019s Current State\nFirst, check the pod\u2019s status to confirm it is indeed in..."
+        },
+        {
+            "anti_keywords_found": [],
+            "category": "troubleshoot",
+            "difficulty": "medium",
+            "error": "",
+            "keyword_hits": 3,
+            "keyword_target": 3,
+            "keywords_found": [
+                "Pending",
+                "resources",
+                "node"
+            ],
+            "passed": true,
+            "question": "A pod is stuck in Pending state. What should I check?",
+            "response_length": 2060,
+            "response_preview": "If a pod is stuck in the **Pending** state, it typically means that the node where the pod is supposed to run does not have enough resources (CPU, memory, or other node allocatable resources) to..."
+        },
+        {
+            "anti_keywords_found": [],
+            "category": "troubleshoot",
+            "difficulty": "easy",
+            "error": "",
+            "keyword_hits": 5,
+            "keyword_target": 3,
+            "keywords_found": [
+                "ImagePullBackOff",
+                "image",
+                "pull",
+                "secret",
+                "registry"
+            ],
+            "passed": true,
+            "question": "I'm getting ImagePullBackOff on my deployment. How do I fix it?",
+            "response_length": 2410,
+            "response_preview": "The ImagePullBackOff error typically indicates that OpenShift is unable to pull the image specified in your DeploymentConfig. Here are some steps to troubleshoot and resolve the issue:\n\n1...."
+        },
+        {
+            "anti_keywords_found": [],
+            "category": "troubleshoot",
+            "difficulty": "medium",
+            "error": "",
+            "keyword_hits": 4,
+            "keyword_target": 3,
+            "keywords_found": [
+                "NotReady",
+                "describe",
+                "node",
+                "conditions"
+            ],
+            "passed": true,
+            "question": "How do I check why a node is in NotReady status?",
+            "response_length": 1741,
+            "response_preview": "To determine why a node is in **NotReady** status in an OpenShift cluster, follow these steps:\n\n1. **Identify the NotReady Node**  \n   Run the command to list nodes and filter for those marked as..."
+        },
+        {
+            "anti_keywords_found": [],
+            "category": "troubleshoot",
+            "difficulty": "hard",
+            "error": "",
+            "keyword_hits": 3,
+            "keyword_target": 2,
+            "keywords_found": [
+                "NetworkPolicy",
+                "service",
+                "namespace"
+            ],
+            "passed": true,
+            "question": "My application cannot connect to a service in another namespace. What could be wrong?",
+            "response_length": 2466,
+            "response_preview": "The issue you're encountering likely stems from network policies or namespace isolation settings that prevent communication between pods in different namespaces. Here are some steps to..."
+        },
+        {
+            "anti_keywords_found": [],
+            "category": "configure",
+            "difficulty": "medium",
+            "error": "",
+            "keyword_hits": 5,
+            "keyword_target": 3,
+            "keywords_found": [
+                "NetworkPolicy",
+                "podSelector",
+                "matchLabels",
+                "ingress",
+                "spec"
+            ],
+            "passed": true,
+            "question": "How do I create a NetworkPolicy that only allows traffic from pods with a specific label?",
+            "response_length": 2022,
+            "response_preview": "To create a NetworkPolicy that only allows traffic from pods with a specific label, you can use the `from` field within the `ingress` section of your NetworkPolicy YAML configuration. Here\u2019s how..."
+        },
+        {
+            "anti_keywords_found": [],
+            "category": "configure",
+            "difficulty": "medium",
+            "error": "",
+            "keyword_hits": 4,
+            "keyword_target": 3,
+            "keywords_found": [
+                "RoleBinding",
+                "Role",
+                "ServiceAccount",
+                "pods"
+            ],
+            "passed": true,
+            "question": "How do I give a service account permission to view pods in a specific namespace?",
+            "response_length": 1251,
+            "response_preview": "To grant a service account permission to view pods in a specific namespace, you can create a RoleBinding that attaches the `view` ClusterRole to the desired service account within that namespace...."
+        },
+        {
+            "anti_keywords_found": [],
+            "category": "configure",
+            "difficulty": "hard",
+            "error": "",
+            "keyword_hits": 3,
+            "keyword_target": 2,
+            "keywords_found": [
+                "SecurityContextConstraints",
+                "SCC",
+                "serviceAccount"
+            ],
+            "passed": true,
+            "question": "How do I configure a pod to run with a specific Security Context Constraint?",
+            "response_length": 2453,
+            "response_preview": "To configure a pod to run with a specific Security Context Constraint (SCC) in OpenShift, you need to follow these steps:\n\n1. **Identify the SCC**: Determine which SCC you want to apply to your..."
+        },
+        {
+            "anti_keywords_found": [],
+            "category": "configure",
+            "difficulty": "easy",
+            "error": "",
+            "keyword_hits": 0,
+            "keyword_target": 3,
+            "keywords_found": [],
+            "passed": false,
+            "question": "How do I set resource limits and requests on a container?",
+            "response_length": 0,
+            "response_preview": ""
+        },
+        {
+            "anti_keywords_found": [],
+            "category": "configure",
+            "difficulty": "medium",
+            "error": "",
+            "keyword_hits": 3,
+            "keyword_target": 3,
+            "keywords_found": [
+                "HorizontalPodAutoscaler",
+                "CPU",
+                "target"
+            ],
+            "passed": true,
+            "question": "How do I configure horizontal pod autoscaling based on CPU usage?",
+            "response_length": 2008,
+            "response_preview": "To configure horizontal pod autoscaling (HPA) based on CPU usage in OpenShift Container Platform, follow these steps:\n\n1. **Verify Cluster Metrics Configuration**: Ensure that your OpenShift..."
+        },
+        {
+            "anti_keywords_found": [],
+            "category": "explain",
+            "difficulty": "medium",
+            "error": "",
+            "keyword_hits": 6,
+            "keyword_target": 3,
+            "keywords_found": [
+                "Deployment",
+                "StatefulSet",
+                "stateless",
+                "stateful",
+                "persistent",
+                "identity"
+            ],
+            "passed": true,
+            "question": "What is the difference between a Deployment and a StatefulSet?",
+            "response_length": 2449,
+            "response_preview": "A **Deployment** and a **StatefulSet** are both Kubernetes resources used in OpenShift Container Platform, but they serve different purposes and have distinct characteristics:\n\n### Deployment\n-..."
+        },
+        {
+            "anti_keywords_found": [],
+            "category": "explain",
+            "difficulty": "easy",
+            "error": "",
+            "keyword_hits": 4,
+            "keyword_target": 3,
+            "keywords_found": [
+                "DaemonSet",
+                "node",
+                "every",
+                "monitoring"
+            ],
+            "passed": true,
+            "question": "What is a DaemonSet and when should I use one?",
+            "response_length": 1783,
+            "response_preview": "A DaemonSet is a Kubernetes resource that ensures a copy of a pod is run on every node in your cluster (or on a selected subset of nodes). It\u2019s useful when you need to run background tasks or..."
+        },
+        {
+            "anti_keywords_found": [],
+            "category": "explain",
+            "difficulty": "medium",
+            "error": "",
+            "keyword_hits": 5,
+            "keyword_target": 4,
+            "keywords_found": [
+                "ClusterIP",
+                "NodePort",
+                "LoadBalancer",
+                "internal",
+                "external"
+            ],
+            "passed": true,
+            "question": "Explain the difference between ClusterIP, NodePort, and LoadBalancer service types.",
+            "response_length": 2642,
+            "response_preview": "Certainly! Here\u2019s a breakdown of the three primary service types in Kubernetes, which are also applicable to OpenShift:\n\n### ClusterIP\n- **Purpose**: Exposes the service on an internal IP address..."
+        },
+        {
+            "anti_keywords_found": [],
+            "category": "explain",
+            "difficulty": "hard",
+            "error": "",
+            "keyword_hits": 5,
+            "keyword_target": 3,
+            "keywords_found": [
+                "SecurityContextConstraints",
+                "SCC",
+                "OpenShift",
+                "security",
+                "privilege"
+            ],
+            "passed": true,
+            "question": "What are OpenShift SecurityContextConstraints and how do they differ from Kubernetes PodSecurityPolicies?",
+            "response_length": 3578,
+            "response_preview": "OpenShift SecurityContextConstraints (SCCs) and Kubernetes PodSecurityPolicies (PSPs) both govern the security context applied to containers within pods, but they differ in several key..."
+        },
+        {
+            "anti_keywords_found": [],
+            "category": "explain",
+            "difficulty": "easy",
+            "error": "",
+            "keyword_hits": 3,
+            "keyword_target": 2,
+            "keywords_found": [
+                "Operator",
+                "manage",
+                "automate"
+            ],
+            "passed": true,
+            "question": "What is the purpose of an Operator in OpenShift?",
+            "response_length": 756,
+            "response_preview": "An Operator in OpenShift serves to encapsulate and automate the operational knowledge required to deploy, configure, and manage complex applications or services on top of Kubernetes. By acting as..."
+        }
+    ],
+    "summary": {
+        "model": "granite-4.1-3b",
+        "passed": 19,
+        "score_pct": 95.0,
+        "timestamp": "2026-05-24T12:59:04Z",
+        "total": 20
+    }
+}

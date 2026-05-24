@@ -1,54 +1,87 @@
 ---
-# DataScienceCluster trimmed for Single Node OpenShift.
-# Assumes you've installed the Red Hat OpenShift AI Operator from
-# OperatorHub and that the operator has created a DSCInitialization
-# (verify with `oc get dsci`).
+# 03-dsc.yaml — RHOAI 3.x DataScienceCluster, trimmed for SNO.
 #
-# Component choices and why:
-# - kserve: Managed -- this is the whole point, we need it
-#   defaultDeploymentMode: RawDeployment avoids pulling in OpenShift
-#   Serverless (Knative) and Service Mesh (Istio), which are heavy on
-#   SNO. The tradeoff is no scale-to-zero. Worth it on constrained
-#   hardware. For an enterprise pilot on real iron, switch back to
-#   Serverless mode.
-# - dashboard: Managed -- great B-roll for the video, lets you click
-#   through Models -> Deployed models and show the InferenceService
-#   visually. ~200MB RAM cost, worth it.
-# - Everything else: Removed -- workbenches, modelmesh, pipelines,
-#   ray, kueue, training operator, codeflare are all unused for an
-#   inference-only demo and would eat several GB of RAM and dozens of
-#   pods on SNO.
-apiVersion: datasciencecluster.opendatahub.io/v1
+# API version changed from v1 to v2 in RHOAI 3.0.
+# Many new components added (Llama Stack, Feast, MLflow, Trainer, NIM, etc.)
+# All non-essential components set to Removed to minimize SNO footprint.
+#
+# Only KServe and the dashboard are Managed. Everything else is Removed.
+# Enable additional components as needed for your use case.
+#
+# Apply:
+#   oc apply -f manifests/03-dsc.yaml
+
+apiVersion: datasciencecluster.opendatahub.io/v2
 kind: DataScienceCluster
 metadata:
   name: default-dsc
+  labels:
+    app.kubernetes.io/name: datasciencecluster
 spec:
   components:
+
+    # -- KServe: Required for model serving --------------------------------
     kserve:
       managementState: Managed
-      defaultDeploymentMode: RawDeployment
-      serving:
-        managementState: Removed  # Disables Knative/Istio install
-        name: knative-serving
+      rawDeploymentServiceConfig: Headless
+      # NIM integration (NVIDIA Inference Microservices) — not needed for
+      # self-hosted vLLM serving
+      nim:
+        managementState: Removed
+      # Models-as-a-Service — cloud-hosted model endpoints, not needed
+      modelsAsService:
+        managementState: Removed
+
+    # -- Dashboard: RHOAI web UI -------------------------------------------
     dashboard:
       managementState: Managed
-    workbenches:
-      managementState: Removed
-    modelmeshserving:
-      managementState: Removed
-    datasciencepipelines:
-      managementState: Removed
-    ray:
-      managementState: Removed
-    kueue:
-      managementState: Removed
-    trainingoperator:
-      managementState: Removed
-    codeflare:
-      managementState: Removed
+
+    # -- Everything below is Removed to minimize SNO footprint -------------
+
+    # Model Registry — useful for MLOps, but adds overhead on SNO
     modelregistry:
       managementState: Removed
+
+    # Llama Stack operator — Llama Stack Distribution for Meta models
+    llamastackoperator:
+      managementState: Removed
+
+    # Feast operator — feature store
+    feastoperator:
+      managementState: Removed
+
+    # MLflow operator — experiment tracking
+    mlflowoperator:
+      managementState: Removed
+
+    # TrustyAI — model explainability and fairness
     trustyai:
       managementState: Removed
-    feastoperator:
+
+    # Data Science Pipelines (Tekton/Argo-based)
+    datasciencepipelines:
+      managementState: Removed
+
+    # Workbenches (Jupyter notebooks)
+    workbenches:
+      managementState: Removed
+
+    # CodeFlare — distributed compute orchestration
+    codeflare:
+      managementState: Removed
+
+    # Ray — distributed compute framework
+    ray:
+      managementState: Removed
+
+    # Kueue — job queuing for batch workloads
+    kueue:
+      managementState: Removed
+
+    # Training operator — distributed model training
+    trainer:
+      managementState: Removed
+
+    # ModelMesh — multi-model serving (we use single-model KServe)
+    modelmeshserving:
       managementState: Removed

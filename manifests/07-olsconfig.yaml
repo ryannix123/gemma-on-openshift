@@ -38,6 +38,7 @@ spec:
   ols:
     defaultModel: granite-41-3b
     defaultProvider: gemma-rhoai
+    introspectionEnabled: false
     logLevel: INFO
     deployment:
       replicas: 1

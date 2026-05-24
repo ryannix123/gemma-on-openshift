@@ -1,0 +1,51 @@
+---
+# 08-metrics.yaml
+#
+# Enables vLLM Prometheus metrics in OpenShift's built-in monitoring.
+# Two resources:
+#   1. ConfigMap to enable user workload monitoring (cluster-wide, idempotent)
+#   2. PodMonitor to scrape vLLM's /metrics endpoint
+#
+# After applying, metrics appear in Observe → Metrics in the OCP console.
+# Use the "Developer" perspective and select the llm-serving project,
+# or switch to "Administrator" perspective for cluster-wide queries.
+#
+# Apply:
+#   oc apply -f manifests/08-metrics.yaml
+
+# -- Enable user workload monitoring (if not already enabled) ----------------
+# This tells OCP's monitoring stack to also scrape metrics from user
+# namespaces, not just platform namespaces. Without this, PodMonitors
+# in user namespaces are silently ignored.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-monitoring-config
+  namespace: openshift-monitoring
+data:
+  config.yaml: |
+    enableUserWorkload: true
+
+---
+# -- PodMonitor for vLLM inference metrics -----------------------------------
+# Scrapes /metrics on port 8080 from the vLLM predictor pod every 30s.
+# Uses the KServe inference service label to find the right pod.
+apiVersion: monitoring.coreos.com/v1
+kind: PodMonitor
+metadata:
+  name: vllm-metrics
+  namespace: llm-serving
+  labels:
+    app: granite-41-3b
+spec:
+  selector:
+    matchLabels:
+      serving.kserve.io/inferenceservice: granite-41-3b
+  podMetricsEndpoints:
+    - port: "8080"
+      path: /metrics
+      interval: 30s
+      scheme: http
+  namespaceSelector:
+    matchNames:
+      - llm-serving

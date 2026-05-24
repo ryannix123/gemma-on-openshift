@@ -30,7 +30,7 @@
     ols_namespace: "openshift-lightspeed"
     # Timeout per question in seconds. Granite 4.1 3B on a 3060 Ti
     # responds in 5-30 seconds depending on answer length.
-    query_timeout: 60
+    query_timeout: 180
 
   tasks:
 
@@ -56,7 +56,7 @@
       ansible.builtin.shell:
         cmd: >
           oc get route -n {{ ols_namespace }}
-          -l app.kubernetes.io/component=lightspeed-service-api
+          -l app.kubernetes.io/component=application-server
           -o jsonpath='{.items[0].spec.host}' 2>/dev/null ||
           echo ""
       register: ols_route
@@ -74,7 +74,7 @@
       ansible.builtin.command:
         cmd: >
           oc get pod -n {{ ols_namespace }}
-          -l app.kubernetes.io/component=lightspeed-service-api
+          -l app.kubernetes.io/component=application-server
           -o jsonpath='{.items[0].status.conditions[?(@.type=="Ready")].status}'
       register: ols_ready
       changed_when: false
@@ -84,7 +84,7 @@
       ansible.builtin.command:
         cmd: >
           oc get pod -n {{ ols_namespace }}
-          -l app.kubernetes.io/component=lightspeed-service-api
+          -l app.kubernetes.io/component=application-server
           -o jsonpath='{.items[0].metadata.name}'
       register: ols_pod
       changed_when: false
@@ -139,7 +139,7 @@
       ansible.builtin.set_fact:
         test_results: "{{ test_results | default([]) + [result] }}"
       vars:
-        response_body: "{{ (item.stdout | from_json).response | default('') }}"
+        response_body: "{{ (item.stdout | from_json).response | default('') if item.stdout else '' }}"
         response_length: "{{ response_body | length }}"
         # Count keyword hits (case-insensitive)
         keyword_hits: >-
@@ -220,7 +220,11 @@
           length: {{ item.response_length }} chars)
       loop: "{{ test_results }}"
       loop_control:
-        label: "Q{{ ansible_loop.index }}"
+        index_var: q_idx
+        label: "Q{{ q_idx + 1 }}"
+      loop_control:
+        index_var: q_idx
+        label: "Q{{ q_idx + 1 }}"
 
     - name: "Report | Display summary"
       ansible.builtin.debug:

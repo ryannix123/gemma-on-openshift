@@ -381,7 +381,7 @@
       ansible.builtin.command:
         cmd: >
           oc wait --for=condition=Ready pod
-          -l app.kubernetes.io/component=lightspeed-service-api
+          -l app.kubernetes.io/component=application-server
           -n openshift-lightspeed
           --timeout={{ timeout_pod_ready }}s
       changed_when: false
