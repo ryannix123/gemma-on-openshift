@@ -1,57 +1,23 @@
 ---
-# 04-servingruntime.yaml
+# 04-servingruntime.yaml — vLLM ServingRuntime for Granite 4.1
 #
-# vLLM ServingRuntime for KServe, configured for Google Gemma 4 E4B-IT
-# on a single NVIDIA RTX 3060 Ti (8 GB VRAM).
-#
-# Image:
-#   We use Red Hat AI Inference Server's Gemma 4 tech-preview image
-#   (registry.redhat.io/rhoai/odh-vllm-cuda-rhel9@sha256:9302ffc252b8681317b4d40ce8b4e66a5db3511f08f6a1ff6d34e595023f85c5). RHOAI 2.25's
-#   default vLLM image (odh-vllm-cuda-rhel9 v2.25.6) ships a vLLM build
-#   from before Gemma 4 was released, so it lacks the gemma4 architecture
-#   support. The rhaii-preview image was rebuilt explicitly for Gemma 4
-#   and is on the RHAIIS 3.2 lineage with vLLM 0.19+ underneath.
-#
-#   This is a Tech Preview image -- intended for experimentation, not
-#   production. For a regulated production deployment, wait for RHOAI to
-#   ship Gemma 4 in a stable release, or use a Red Hat-validated model
-#   like Llama-3.1-8B-Instruct or Granite-3.2-8B-Instruct on the standard
-#   RHOAI vLLM-CUDA image.
-#
-# Args explained:
-#   --max-model-len=9216        Reduced from upstream default to fit KV cache
-#                               in 8 GB. OLS prompts comfortably fit in 4K.
-#   --max-num-seqs=4            Concurrency cap. One demo user, no need for
-#                               batched throughput. Smaller batch -> smaller
-#                               KV cache.
-#   --gpu-memory-utilization=0.95  vLLM is allowed to use up to 92% of the
-#                                  card's 8 GB. Leaves headroom for the
-#                                  driver and CUDA contexts.
-#   --enforce-eager             Skip CUDA graph capture, saves ~500 MB VRAM
-#                               on 8 GB cards. Slightly slower but fits.
-#                               load time. Roughly halves weights memory
-#                               (~8 GB bf16 -> ~4 GB fp8).
-#                               context capacity per byte of VRAM.
-#   --limit-mm-per-prompt       Tell vLLM not to allocate VRAM for the
-#                               vision and audio multimodal encoders.
-#                               Gemma 4 E4B is multimodal by default; OLS
-#                               is text-only, so we skip the encoder
-#                               profiling entirely. Saves a meaningful
-#                               chunk of VRAM.
-#                               Note: vLLM expects this as a JSON string,
-#                               so we wrap the whole arg in YAML single
-#                               quotes to preserve the JSON braces.
+# Annotations follow the RHOAI pre-installed runtime pattern to
+# maximize dashboard integration (metrics, hardware profiles).
 
 apiVersion: serving.kserve.io/v1alpha1
 kind: ServingRuntime
 metadata:
-  name: vllm-gemma4
+  name: vllm-granite
   namespace: llm-serving
   labels:
     opendatahub.io/dashboard: "true"
   annotations:
-    openshift.io/display-name: "vLLM ServingRuntime for Gemma 4 (RHAIIS Tech Preview)"
+    opendatahub.io/accelerator-name: ""
+    opendatahub.io/apiProtocol: REST
     opendatahub.io/recommended-accelerators: '["nvidia.com/gpu"]'
+    opendatahub.io/template-display-name: vLLM NVIDIA GPU ServingRuntime for KServe
+    opendatahub.io/template-name: vllm-cuda-runtime
+    openshift.io/display-name: "vLLM ServingRuntime for Granite 4.1"
 spec:
   multiModel: false
   supportedModelFormats:
@@ -74,8 +40,6 @@ spec:
         - "--enforce-eager"
         - "--enable-auto-tool-choice"
         - "--tool-call-parser=granite"
-        - "--enable-auto-tool-choice"
-        - "--tool-call-parser=granite"
       env:
         - name: HF_HUB_OFFLINE
           value: "1"
@@ -85,27 +49,27 @@ spec:
         - containerPort: 8080
           protocol: TCP
       resources:
-        limits:
-          cpu: "8"
-          memory: 16Gi
-          nvidia.com/gpu: "1"
         requests:
           cpu: "4"
           memory: 12Gi
           nvidia.com/gpu: "1"
-      readinessProbe:
-        httpGet:
-          path: /health
-          port: 8080
-        initialDelaySeconds: 60
-        periodSeconds: 10
-        timeoutSeconds: 1
-        failureThreshold: 3
+        limits:
+          cpu: "8"
+          memory: 16Gi
+          nvidia.com/gpu: "1"
       livenessProbe:
         httpGet:
           path: /health
           port: 8080
         initialDelaySeconds: 120
         periodSeconds: 30
-        timeoutSeconds: 1
         failureThreshold: 3
+        timeoutSeconds: 1
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8080
+        initialDelaySeconds: 60
+        periodSeconds: 10
+        failureThreshold: 3
+        timeoutSeconds: 1
